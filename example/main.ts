@@ -30,8 +30,7 @@ const center = Cartesian3.fromDegrees(112, 32, 0);
 const enuMatrix = Transforms.eastNorthUpToFixedFrame(center)
 
 
-// 10*10*10 的立方体（单位：米）
-const half = 5.0;
+const half = 0.1;
 const box = widget.scene.primitives.add(
   new Primitive({
     geometryInstances: new GeometryInstance({
