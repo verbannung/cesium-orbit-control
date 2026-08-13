@@ -53,7 +53,7 @@ const orbitControl = new CesiumOrbitControl(widget)
 
 
 
-orbitControl.attachObject(box.modelMatrix)
+orbitControl.attachObject(box.modelMatrix, "scale")
 widget.camera.flyTo({
   destination: center
 })

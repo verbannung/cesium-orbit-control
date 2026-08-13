@@ -37,6 +37,7 @@ class CesiumOrbitControl {
   private _P1: Cartesian3 | null = null;
   private _R0: Matrix3 | null = null;  
   private _T0: Cartesian3 | null = null;
+  private _M0: Matrix4 | null = null;
   private mode: "translate" | "rotate" | "scale" = "translate";
 
   constructor(widget: CesiumWidget) {
@@ -51,6 +52,7 @@ class CesiumOrbitControl {
     if(mode === "rotate"){
       this.initRotateAxis();
     }else{
+      // 旋转和缩放轴
       this.initAxis();
     }
     this.initEvents();
@@ -77,7 +79,7 @@ class CesiumOrbitControl {
     const picked = this.widget.scene.pick(event.position);
     
     if (picked?.id) {
-      const { axis, type } = picked.id;
+      const { axis } = picked.id;
       
       // T0: 物体世界位置
       const T0 = Matrix4.getTranslation(this.modelMatrix, new Cartesian3());
@@ -93,7 +95,7 @@ class CesiumOrbitControl {
       const cameraPos = this.widget.scene.camera.position;
       const E = Cartesian3.normalize(Cartesian3.subtract(cameraPos, T0, new Cartesian3()), new Cartesian3());
 
-      if (type === "rotate") {
+      if (this.mode === "rotate") {
         // 旋转模式：平面垂直于旋转轴
         if (axis === "X") {
           this.plane = Plane.fromPointNormal(T0, X_w);
@@ -137,6 +139,7 @@ class CesiumOrbitControl {
       this._P1 = P1;
       this._R0 = R0;
       this._T0 = T0;
+      this._M0 = Matrix4.clone(this.modelMatrix);
 
       // 锁定镜头视角，禁止移动
 // 保持相机当前与目标的相对位置
@@ -154,6 +157,7 @@ class CesiumOrbitControl {
     this._P1 = null;
     this._R0 = null;
     this._T0 = null;
+    this._M0 = null;
     this.widget.scene.screenSpaceCameraController.enableRotate = true;
     this.widget.scene.screenSpaceCameraController.enableTranslate = true;
     this.widget.scene.screenSpaceCameraController.enableZoom = true;
@@ -218,6 +222,60 @@ class CesiumOrbitControl {
       this.modelMatrix = Matrix4.fromRotationTranslation(R_new, this._T0, this.modelMatrix);
       
       Matrix4.clone(this.modelMatrix, this._rotateAxis.modelMatrix);
+    } else if (this.mode === "scale") {
+      if (!this._M0) return;
+
+      // V1/V2：按下点与当前点相对物体原点的世界向量
+      const V1 = Cartesian3.subtract(this._P1, this._T0, new Cartesian3());
+      const V2 = Cartesian3.subtract(P2, this._T0, new Cartesian3());
+
+      // 从 R0 中提取纯旋转（归一化各列，排除已有缩放），保证转置即为逆
+      const R_pure = new Matrix3();
+      Matrix3.setColumn(
+        R_pure,
+        0,
+        Cartesian3.normalize(Matrix3.getColumn(this._R0, 0, new Cartesian3()), new Cartesian3()),
+        R_pure,
+      );
+      Matrix3.setColumn(
+        R_pure,
+        1,
+        Cartesian3.normalize(Matrix3.getColumn(this._R0, 1, new Cartesian3()), new Cartesian3()),
+        R_pure,
+      );
+      Matrix3.setColumn(
+        R_pure,
+        2,
+        Cartesian3.normalize(Matrix3.getColumn(this._R0, 2, new Cartesian3()), new Cartesian3()),
+        R_pure,
+      );
+
+      // 转到局部坐标系，各分量即为向量在对应局部轴上的投影
+      const R_inv = Matrix3.transpose(R_pure, new Matrix3());
+      const V1_local = Matrix3.multiplyByVector(R_inv, V1, new Cartesian3());
+      const V2_local = Matrix3.multiplyByVector(R_inv, V2, new Cartesian3());
+
+      const EPSILON = 1e-8;
+      const MIN_SCALE = 0.01;
+      const axis = this._axis;
+
+      // 逐分量相除得到倍率，未选中的轴保持 1
+      const ratio = new Cartesian3(1, 1, 1);
+      if (axis.includes("X") && Math.abs(V1_local.x) >= EPSILON) {
+        ratio.x = Math.max(MIN_SCALE, V2_local.x / V1_local.x);
+      }
+      if (axis.includes("Y") && Math.abs(V1_local.y) >= EPSILON) {
+        ratio.y = Math.max(MIN_SCALE, V2_local.y / V1_local.y);
+      }
+      if (axis.includes("Z") && Math.abs(V1_local.z) >= EPSILON) {
+        ratio.z = Math.max(MIN_SCALE, V2_local.z / V1_local.z);
+      }
+
+      // M1 = M0 * Scale(ratio)，右乘保证沿物体局部轴缩放且不改变平移
+      Matrix4.multiply(this._M0, Matrix4.fromScale(ratio), this.modelMatrix);
+
+      Matrix4.clone(this.modelMatrix, this._axisLines.modelMatrix);
+      Matrix4.clone(this.modelMatrix, this._axisArrows.modelMatrix);
     } else {
       const deltaW = Cartesian3.subtract(P2, this._P1, new Cartesian3());
 
