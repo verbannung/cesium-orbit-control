@@ -11,6 +11,7 @@ import {
   Math as CesiumMath,
   Matrix3,
   Matrix4,
+  PerspectiveFrustum,
   PerInstanceColorAppearance,
   Plane,
   PolylineColorAppearance,
@@ -20,6 +21,7 @@ import {
   ScreenSpaceEventType,
   Quaternion,
 } from "@cesium/engine";
+import { buildRingPrimitive, buildRingStrip } from "./axisManager";
 
 class CesiumOrbitControl {
   private widget: CesiumWidget;
@@ -30,7 +32,7 @@ class CesiumOrbitControl {
   // 坐标轴：三条线 / 三个箭头各合进一个 Primitive，共用 this.modelMatrix
   private _axisLines!: Primitive;
   private _axisArrows!: Primitive;
-  private _rotateAxis!: Primitive;
+  private _rotateAxis!: Array<Primitive>;
   // 拖拽状态
   private _dragging = false;
   private _axis: string | null = null;
@@ -39,6 +41,10 @@ class CesiumOrbitControl {
   private _T0: Cartesian3 | null = null;
   private _M0: Matrix4 | null = null;
   private mode: "translate" | "rotate" | "scale" = "translate";
+
+  // 固定像素尺寸
+  private _gizmoPixelSize = 80;
+  private _removePreRender: (() => void) | null = null;
 
   constructor(widget: CesiumWidget) {
     this.widget = widget;
@@ -129,6 +135,7 @@ class CesiumOrbitControl {
       }
 
       // 计算 P1：鼠标射线与平面的初始交点
+      // TODO 后续可以修改为自己写
       const ray = this.widget.scene.camera.getPickRay(event.position);
       if (!ray) return;
       const P1 = IntersectionTests.rayPlane(ray, this.plane, new Cartesian3());
@@ -221,7 +228,7 @@ class CesiumOrbitControl {
       
       this.modelMatrix = Matrix4.fromRotationTranslation(R_new, this._T0, this.modelMatrix);
       
-      Matrix4.clone(this.modelMatrix, this._rotateAxis.modelMatrix);
+      this.updateGizmoScale();
     } else if (this.mode === "scale") {
       if (!this._M0) return;
 
@@ -305,59 +312,55 @@ class CesiumOrbitControl {
   }
 
   private initRotateAxis():void{
-    const radius = 1;
+    const mm = Matrix4.clone(this.modelMatrix);
+    const rotateXAxis = buildRingPrimitive({ modelMatrix: Matrix4.clone(mm), u: Cartesian3.UNIT_Y, v: Cartesian3.UNIT_Z, color: Color.RED.withAlpha(0.9), axis: 'X' });
+    const rotateYAxis = buildRingPrimitive({ modelMatrix: Matrix4.clone(mm), u: Cartesian3.UNIT_Z, v: Cartesian3.UNIT_X, color: Color.LIME.withAlpha(0.9), axis: 'Y' });
+    const rotateZAxis = buildRingPrimitive({ modelMatrix: Matrix4.clone(mm), u: Cartesian3.UNIT_X, v: Cartesian3.UNIT_Y, color: Color.DODGERBLUE.withAlpha(0.9), axis: 'Z' });
 
-    const createCircleGeometry = () => {
-      const positions: Cartesian3[] = [];
-      const segments = 64;
-      for (let i = 0; i <= segments; i++) {
-        const a = (i / segments) * CesiumMath.TWO_PI;
-        positions.push(new Cartesian3(Math.cos(a) * radius, Math.sin(a) * radius, 0));
-      }
-      return new PolylineGeometry({
-        positions,
-        width: 4,
-        vertexFormat: PolylineColorAppearance.VERTEX_FORMAT,
-        arcType: ArcType.NONE,
-      });
-    };
-
-    const axes: Array<{ axis: "X" | "Y" | "Z"; color: Color; rot: Matrix4 }> = [
-      {
-        axis: "X",
-        color: Color.RED,
-        rot: Matrix4.fromRotation(Matrix3.fromRotationY(CesiumMath.toRadians(90))),
-      },
-      {
-        axis: "Y",
-        color: Color.GREEN,
-        rot: Matrix4.fromRotation(Matrix3.fromRotationX(CesiumMath.toRadians(90))),
-      },
-      {
-        axis: "Z",
-        color: Color.BLUE,
-        rot: Matrix4.IDENTITY,
-      },
+    this._rotateAxis = [
+      this.widget.scene.primitives.add(rotateXAxis),
+      this.widget.scene.primitives.add(rotateYAxis),
+      this.widget.scene.primitives.add(rotateZAxis),
     ];
 
-    this._rotateAxis = this.widget.scene.primitives.add(
-      new Primitive({
-        geometryInstances: axes.map(
-          ({ axis, color, rot }) =>
-            new GeometryInstance({
-              geometry: createCircleGeometry(),
-              modelMatrix: Matrix4.clone(rot),
-              attributes: {
-                color: ColorGeometryInstanceAttribute.fromColor(color),
-              },
-              id: { axis, type: "rotate" },
-            }),
-        ),
-        appearance: new PolylineColorAppearance({ translucent: true }),
-        asynchronous: false,
-        modelMatrix: Matrix4.clone(this.modelMatrix),
-      }),
-    );
+    this.updateGizmoScale();
+    this._removePreRender?.();
+    this._removePreRender = this.widget.scene.preRender.addEventListener(() => {
+      this.updateGizmoScale();
+    });
+  }
+
+  private updateGizmoScale(): void {
+    if (!this._rotateAxis) return;
+
+    const T = Matrix4.getTranslation(this.modelMatrix, new Cartesian3());
+    const scale = this.computeScreenSpaceScale(T, this._gizmoPixelSize);
+
+    const R = Matrix4.getMatrix3(this.modelMatrix, new Matrix3());
+    const R_pure = new Matrix3();
+    Matrix3.setColumn(R_pure, 0, Cartesian3.normalize(Matrix3.getColumn(R, 0, new Cartesian3()), new Cartesian3()), R_pure);
+    Matrix3.setColumn(R_pure, 1, Cartesian3.normalize(Matrix3.getColumn(R, 1, new Cartesian3()), new Cartesian3()), R_pure);
+    Matrix3.setColumn(R_pure, 2, Cartesian3.normalize(Matrix3.getColumn(R, 2, new Cartesian3()), new Cartesian3()), R_pure);
+
+    const scaledR = Matrix3.multiplyByScalar(R_pure, scale, new Matrix3());
+    const gizmoMatrix = Matrix4.fromRotationTranslation(scaledR, T, new Matrix4());
+
+    for (const prim of this._rotateAxis) {
+      Matrix4.clone(gizmoMatrix, prim.modelMatrix);
+    }
+  }
+
+  private computeScreenSpaceScale(position: Cartesian3, pixelSize: number): number {
+    const camera = this.widget.scene.camera;
+    const dist = Cartesian3.distance(position, camera.positionWC);
+    const frustum = camera.frustum;
+    if (frustum instanceof PerspectiveFrustum) {
+      // 用垂直 FOV，与 tinygizmo 的 yfov 语义一致
+      const fovy = frustum.fovy ?? frustum.fov ?? 0;
+      const viewportHeight = this.widget.scene.canvas.clientHeight;
+      return Math.tan(fovy * 0.5) * dist * (pixelSize / viewportHeight);
+    }
+    return dist * (pixelSize / 1000);
   }
 
   private initAxis(): void {
@@ -446,4 +449,4 @@ class CesiumOrbitControl {
 }
 
 
-export { CesiumOrbitControl };
+export { CesiumOrbitControl, buildRingPrimitive, buildRingStrip };
