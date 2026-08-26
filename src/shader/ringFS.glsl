@@ -12,4 +12,5 @@ void main() {
 
   out_FragColor = vec4(material.diffuse, material.alpha);
   czm_writeLogDepth();
+
 }

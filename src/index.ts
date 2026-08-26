@@ -20,8 +20,9 @@ import {
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
   Quaternion,
+  OrthographicFrustum,
 } from "@cesium/engine";
-import { buildRingPrimitive, buildRingStrip } from "./axisManager";
+import { buildRingPrimitive, buildRingStrip, buildScalePrimitive, buildTransformPrimitive } from "./axisManager";
 
 class CesiumOrbitControl {
   private widget: CesiumWidget;
@@ -30,8 +31,10 @@ class CesiumOrbitControl {
   private eventHandler: ScreenSpaceEventHandler;
 
   // 坐标轴：三条线 / 三个箭头各合进一个 Primitive，共用 this.modelMatrix
-  private _axisLines!: Primitive;
-  private _axisArrows!: Primitive;
+  // private _axisLines!: Primitive;
+  // private _axisArrows!: Primitive;
+  private _transformAxis!: Array<Primitive>;
+  private _scaleAxis!: Array<Primitive>;
   private _rotateAxis!: Array<Primitive>;
   // 拖拽状态
   private _dragging = false;
@@ -43,7 +46,7 @@ class CesiumOrbitControl {
   private mode: "translate" | "rotate" | "scale" = "translate";
 
   // 固定像素尺寸
-  private _gizmoPixelSize = 80;
+  private _gizmoPixelSize = 80; //约定直径像素
   private _removePreRender: (() => void) | null = null;
 
   constructor(widget: CesiumWidget) {
@@ -52,15 +55,22 @@ class CesiumOrbitControl {
     this.eventHandler = new ScreenSpaceEventHandler(widget.canvas);
   }
 
-  public attachObject(modelMatrix: Matrix4,mode: "translate" | "rotate" | "scale"="rotate") {
+  public attachObject(modelMatrix: Matrix4,mode: "translate" | "rotate" | "scale"="translate") {
     this.modelMatrix = modelMatrix;
     this.mode = mode; 
     if(mode === "rotate"){
       this.initRotateAxis();
-    }else{
+    }else if(mode === "scale"){
+      this.initScaleAxis();
+    }else if(mode === "translate"){
       // 旋转和缩放轴
-      this.initAxis();
+      this.initTransformAxis();
     }
+    this.updateGizmoScale();
+    this._removePreRender?.();
+    this._removePreRender = this.widget.scene.preRender.addEventListener(() => {
+      this.updateGizmoScale();
+    });
     this.initEvents();
    
   }
@@ -281,8 +291,8 @@ class CesiumOrbitControl {
       // M1 = M0 * Scale(ratio)，右乘保证沿物体局部轴缩放且不改变平移
       Matrix4.multiply(this._M0, Matrix4.fromScale(ratio), this.modelMatrix);
 
-      Matrix4.clone(this.modelMatrix, this._axisLines.modelMatrix);
-      Matrix4.clone(this.modelMatrix, this._axisArrows.modelMatrix);
+      this._transformAxis.forEach(axis => Matrix4.clone(this.modelMatrix, axis.modelMatrix));
+      this._scaleAxis.forEach(axis => Matrix4.clone(this.modelMatrix, axis.modelMatrix));
     } else {
       const deltaW = Cartesian3.subtract(P2, this._P1, new Cartesian3());
 
@@ -301,8 +311,8 @@ class CesiumOrbitControl {
       const T1 = Cartesian3.add(this._T0, deltaWPrime, new Cartesian3());
       Matrix4.setTranslation(this.modelMatrix, T1, this.modelMatrix);
 
-      Matrix4.clone(this.modelMatrix, this._axisLines.modelMatrix);
-      Matrix4.clone(this.modelMatrix, this._axisArrows.modelMatrix);
+      this._transformAxis.forEach(axis => Matrix4.clone(this.modelMatrix, axis.modelMatrix));
+      this._scaleAxis.forEach(axis => Matrix4.clone(this.modelMatrix, axis.modelMatrix));
     }
   }
 
@@ -322,16 +332,9 @@ class CesiumOrbitControl {
       this.widget.scene.primitives.add(rotateYAxis),
       this.widget.scene.primitives.add(rotateZAxis),
     ];
-
-    this.updateGizmoScale();
-    this._removePreRender?.();
-    this._removePreRender = this.widget.scene.preRender.addEventListener(() => {
-      this.updateGizmoScale();
-    });
   }
 
   private updateGizmoScale(): void {
-    if (!this._rotateAxis) return;
 
     const T = Matrix4.getTranslation(this.modelMatrix, new Cartesian3());
     const scale = this.computeScreenSpaceScale(T, this._gizmoPixelSize);
@@ -344,107 +347,140 @@ class CesiumOrbitControl {
 
     const scaledR = Matrix3.multiplyByScalar(R_pure, scale, new Matrix3());
     const gizmoMatrix = Matrix4.fromRotationTranslation(scaledR, T, new Matrix4());
-
-    for (const prim of this._rotateAxis) {
-      Matrix4.clone(gizmoMatrix, prim.modelMatrix);
+    if (this._rotateAxis){
+      for (const prim of this._rotateAxis) {
+        Matrix4.clone(gizmoMatrix, prim.modelMatrix);
+      }
     }
+    if (this._scaleAxis){
+      for (const prim of this._scaleAxis) {
+        Matrix4.clone(gizmoMatrix, prim.modelMatrix);
+      }
+    } 
+    if (this._transformAxis){
+      for (const prim of this._transformAxis) {
+        Matrix4.clone(gizmoMatrix, prim.modelMatrix);
+      }
+    }
+
+   
+
   }
 
   private computeScreenSpaceScale(position: Cartesian3, pixelSize: number): number {
     const camera = this.widget.scene.camera;
     const dist = Cartesian3.distance(position, camera.positionWC);
     const frustum = camera.frustum;
+    const viewportHeight = this.widget.scene.canvas.clientHeight;
+
     if (frustum instanceof PerspectiveFrustum) {
-      // 用垂直 FOV，与 tinygizmo 的 yfov 语义一致
       const fovy = frustum.fovy ?? frustum.fov ?? 0;
-      const viewportHeight = this.widget.scene.canvas.clientHeight;
-      return Math.tan(fovy * 0.5) * dist * (pixelSize / viewportHeight);
+      return 2*Math.tan(fovy * 0.5) * dist * (pixelSize / viewportHeight);
     }
+    if(frustum instanceof OrthographicFrustum){
+      if(frustum.width && frustum.aspectRatio){
+        const h=frustum.width/frustum.aspectRatio;
+        return (h/viewportHeight)*pixelSize;
+      }
+    }
+
     return dist * (pixelSize / 1000);
   }
+  private initScaleAxis():void{
+    const scaleAxis = buildScalePrimitive(this.modelMatrix.clone());
+    for (const p of scaleAxis) {
+      this.widget.scene.primitives.add(p);
+    }
+    this._scaleAxis = scaleAxis;
+  }
 
-  private initAxis(): void {
-    const length = 1.0;
-    const arrowLen = 0.15;
+  private initTransformAxis(): void {
+    const transformAxis = buildTransformPrimitive(this.modelMatrix.clone());
+    for (const p of transformAxis) {
+      this.widget.scene.primitives.add(p);
+    }
+    this._transformAxis = transformAxis;
+    // const length = 1.0;
+    // const arrowLen = 0.15;
 
-    const createLineGeometry = () =>
-      new PolylineGeometry({
-        positions: [Cartesian3.ZERO, new Cartesian3(length, 0, 0)],
-        width: 4,
-        vertexFormat: PolylineColorAppearance.VERTEX_FORMAT,
-        arcType: ArcType.NONE,
-      });
+    // const createLineGeometry = () =>
+    //   new PolylineGeometry({
+    //     positions: [Cartesian3.ZERO, new Cartesian3(length, 0, 0)],
+    //     width: 4,
+    //     vertexFormat: PolylineColorAppearance.VERTEX_FORMAT,
+    //     arcType: ArcType.NONE,
+    //   });
 
-    const createArrowGeometry = () =>
-      new CylinderGeometry({
-        length: arrowLen,
-        topRadius: 0,
-        bottomRadius: 0.04,
-        vertexFormat: PerInstanceColorAppearance.VERTEX_FORMAT,
-      });
+    // const createArrowGeometry = () =>
+    //   new CylinderGeometry({
+    //     length: arrowLen,
+    //     topRadius: 0,
+    //     bottomRadius: 0.04,
+    //     vertexFormat: PerInstanceColorAppearance.VERTEX_FORMAT,
+    //   });
 
-    const arrowLocalX = Matrix4.multiply(
-      Matrix4.fromTranslation(new Cartesian3(length - arrowLen / 2, 0, 0)),
-      Matrix4.fromRotation(
-        Matrix3.fromRotationY(CesiumMath.toRadians(90)),
-      ),
-      new Matrix4(),
-    );
+    // const arrowLocalX = Matrix4.multiply(
+    //   Matrix4.fromTranslation(new Cartesian3(length - arrowLen / 2, 0, 0)),
+    //   Matrix4.fromRotation(
+    //     Matrix3.fromRotationY(CesiumMath.toRadians(90)),
+    //   ),
+    //   new Matrix4(),
+    // );
 
-    const axes: Array<{ axis: "X" | "Y" | "Z"; color: Color; rot: Matrix4 }> = [
-      { axis: "X", color: Color.RED, rot: Matrix4.IDENTITY },
-      {
-        axis: "Y",
-        color: Color.GREEN,
-        rot: Matrix4.fromRotation(Matrix3.fromRotationZ(CesiumMath.toRadians(90))),
-      },
-      {
-        axis: "Z",
-        color: Color.BLUE,
-        rot: Matrix4.fromRotation(Matrix3.fromRotationY(CesiumMath.toRadians(-90))),
-      },
-    ];
+    // const axes: Array<{ axis: "X" | "Y" | "Z"; color: Color; rot: Matrix4 }> = [
+    //   { axis: "X", color: Color.RED, rot: Matrix4.IDENTITY },
+    //   {
+    //     axis: "Y",
+    //     color: Color.GREEN,
+    //     rot: Matrix4.fromRotation(Matrix3.fromRotationZ(CesiumMath.toRadians(90))),
+    //   },
+    //   {
+    //     axis: "Z",
+    //     color: Color.BLUE,
+    //     rot: Matrix4.fromRotation(Matrix3.fromRotationY(CesiumMath.toRadians(-90))),
+    //   },
+    // ];
 
-    this._axisLines = this.widget.scene.primitives.add(
-      new Primitive({
-        geometryInstances: axes.map(
-          ({ axis, color, rot }) =>
-            new GeometryInstance({
-              geometry: createLineGeometry(),
-              modelMatrix: Matrix4.clone(rot),
-              attributes: {
-                color: ColorGeometryInstanceAttribute.fromColor(color),
-              },
-              id: { axis, type: "translate" },
-            }),
-        ),
-        appearance: new PolylineColorAppearance({ translucent: true }),
-        asynchronous: false,
-        modelMatrix: Matrix4.clone(this.modelMatrix),
-      }),
-    );
+    // this._transformAxis = this.widget.scene.primitives.add(
+    //   new Primitive({
+    //     geometryInstances: axes.map(
+    //       ({ axis, color, rot }) =>
+    //         new GeometryInstance({
+    //           geometry: createLineGeometry(),
+    //           modelMatrix: Matrix4.clone(rot),
+    //           attributes: {
+    //             color: ColorGeometryInstanceAttribute.fromColor(color),
+    //           },
+    //           id: { axis, type: "translate" },
+    //         }),
+    //     ),
+    //     appearance: new PolylineColorAppearance({ translucent: true }),
+    //     asynchronous: false,
+    //     modelMatrix: Matrix4.clone(this.modelMatrix),
+    //   }),
+    // );
 
-    this._axisArrows = this.widget.scene.primitives.add(
-      new Primitive({
-        geometryInstances: axes.map(
-          ({ axis, color, rot }) =>
-            new GeometryInstance({
-              geometry: createArrowGeometry(),
-              modelMatrix: Matrix4.multiply(rot, arrowLocalX, new Matrix4()),
-              attributes: {
-                color: ColorGeometryInstanceAttribute.fromColor(color),
-              },
-              id: { axis, type: "translate" },
-            }),
-        ),
-        appearance: new PerInstanceColorAppearance({
-          flat: true,
-          translucent: true,
-        }),
-        asynchronous: false,
-        modelMatrix: Matrix4.clone(this.modelMatrix),
-      }),
-    );
+    // this._axisArrows = this.widget.scene.primitives.add(
+    //   new Primitive({
+    //     geometryInstances: axes.map(
+    //       ({ axis, color, rot }) =>
+    //         new GeometryInstance({
+    //           geometry: createArrowGeometry(),
+    //           modelMatrix: Matrix4.multiply(rot, arrowLocalX, new Matrix4()),
+    //           attributes: {
+    //             color: ColorGeometryInstanceAttribute.fromColor(color),
+    //           },
+    //           id: { axis, type: "translate" },
+    //         }),
+    //     ),
+    //     appearance: new PerInstanceColorAppearance({
+    //       flat: true,
+    //       translucent: true,
+    //     }),
+    //     asynchronous: false,
+    //     modelMatrix: Matrix4.clone(this.modelMatrix),
+    //   }),
+    // );
   }
 }
 

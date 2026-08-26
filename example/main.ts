@@ -26,6 +26,8 @@ const widget = new CesiumWidget('cesiumContainer', {
   terrainProvider: new EllipsoidTerrainProvider(),
   scene3DOnly: true,
 });
+// widget.scene.camera.switchToOrthographicFrustum();
+
 
 const center = Cartesian3.fromDegrees(112, 32, 10);
 const enuMatrix = Transforms.eastNorthUpToFixedFrame(center);
@@ -50,7 +52,7 @@ const primitive = new Primitive({
 const orbitControl = new CesiumOrbitControl(widget);
 widget.scene.primitives.add(primitive);
 
-orbitControl.attachObject(primitive.modelMatrix, "rotate");
+orbitControl.attachObject(primitive.modelMatrix, "translate");
 
 // lookAt 会锁定相机参考系，随后置回单位矩阵解锁，只借它摆好机位
 widget.camera.lookAt(center, new HeadingPitchRange(0, CesiumMath.toRadians(-35), 40));
