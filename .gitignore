@@ -9,7 +9,7 @@
 !vite.config.ts
 !vitest.config.ts
 
-
+!LICENSE
 !src/
 !example/
 !tests/
