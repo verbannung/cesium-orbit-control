@@ -1,79 +1,56 @@
-import {
-  Cartesian3,
-  ColorGeometryInstanceAttribute,
-  CylinderGeometry,
-  GeometryInstance,
-  Matrix4,
-  PerInstanceColorAppearance,
-  Primitive,
-} from '@cesium/engine'
+import { Cartesian3, Color } from '@cesium/engine'
 import { BaseGeometry } from './baseGeometry'
 import {
-  AXES,
-  buildAxisLinePrimitive,
-  buildDiscGeometry,
-  gizmoSolidRenderState,
+  buildHeadAxis,
+  buildHeadAxisMeshes,
+  buildViewRing,
+  buildViewRingMeshes,
 } from './geometryUtil'
-import {
-  AXIS_LENGTH,
-  HEAD_LEN,
-  HEAD_RADIUS,
-  HEAD_SLICES,
-  type GizmoPickId,
-} from './geometry'
+import { Handle } from './types'
 
 export class TranslateGeometry extends BaseGeometry {
-  public buildGeometry(modelMatrix: Matrix4): Primitive[] {
-    this._primitives = buildTransformPrimitive(modelMatrix)
-    return this._primitives
+  build(): void {
+    const X = Cartesian3.UNIT_X
+    const Y = Cartesian3.UNIT_Y
+    const Z = Cartesian3.UNIT_Z
+
+    // Handle(id, basisLocal, color, meshes, primitives)
+    const x = new Handle(
+      'translate-x',
+      [Y, Z],
+      Color.RED,
+      buildHeadAxisMeshes(Y, Z),
+      buildHeadAxis(Y, Z),
+        'axis'
+    )
+    const y = new Handle(
+      'translate-y',
+      [Z, X],
+      Color.LIME,
+      buildHeadAxisMeshes(Z, X),
+      buildHeadAxis(Z, X),
+        'axis'
+    )
+    const z = new Handle(
+      'translate-z',
+      [X, Y],
+      Color.DODGERBLUE,
+      buildHeadAxisMeshes(X, Y),
+      buildHeadAxis(X, Y),
+        'axis'
+    )
+    const view = new Handle(
+      'translate-view',
+      [X, Y],
+      Color.WHITE,
+      buildViewRingMeshes(X, Y),
+      buildViewRing(X, Y, { id: 'translate-view' }),
+        'view'
+    )
+
+    this.assets = [x, y, z, view]
+    for (const handle of this.assets) {
+      for (const p of handle.primitives) this.scene.primitives.add(p)
+    }
   }
-}
-
-export function buildTransformPrimitive(modelMatrix: Matrix4 = Matrix4.IDENTITY) {
-  return [
-    buildAxisLinePrimitive(modelMatrix, 'translate', AXIS_LENGTH),
-    buildArrowHeadPrimitive(modelMatrix),
-  ]
-}
-
-function buildArrowHeadPrimitive(modelMatrix: Matrix4) {
-  const disc = buildDiscGeometry(HEAD_RADIUS, HEAD_SLICES)
-  const cone = new CylinderGeometry({
-    length: HEAD_LEN,
-    topRadius: 0.0,
-    bottomRadius: HEAD_RADIUS,
-    slices: HEAD_SLICES,
-    vertexFormat: PerInstanceColorAppearance.FLAT_VERTEX_FORMAT,
-  })
-  const discLocal = Matrix4.fromTranslation(new Cartesian3(0, 0, AXIS_LENGTH))
-  const coneLocal = Matrix4.fromTranslation(
-    new Cartesian3(0, 0, AXIS_LENGTH + HEAD_LEN / 2),
-  )
-
-  const instances = AXES.flatMap(({ axis, color, rot }) => [
-    new GeometryInstance({
-      geometry: disc,
-      modelMatrix: Matrix4.multiply(rot, discLocal, new Matrix4()),
-      attributes: { color: ColorGeometryInstanceAttribute.fromColor(color) },
-      id: { axis, type: 'translate' } satisfies GizmoPickId,
-    }),
-    new GeometryInstance({
-      geometry: cone,
-      modelMatrix: Matrix4.multiply(rot, coneLocal, new Matrix4()),
-      attributes: { color: ColorGeometryInstanceAttribute.fromColor(color) },
-      id: { axis, type: 'translate' } satisfies GizmoPickId,
-    }),
-  ])
-
-  return new Primitive({
-    geometryInstances: instances,
-    appearance: new PerInstanceColorAppearance({
-      flat: true,
-      translucent: false,
-      renderState: gizmoSolidRenderState(),
-    }),
-    asynchronous: false,
-    compressVertices: false,
-    modelMatrix,
-  })
 }

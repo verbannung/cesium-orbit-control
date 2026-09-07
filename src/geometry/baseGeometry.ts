@@ -1,29 +1,24 @@
-import { Matrix4, Primitive, type Scene } from '@cesium/engine'
+import { type Scene } from '@cesium/engine'
+import { Handle } from './types'
 
 export abstract class BaseGeometry {
-  
-  protected _primitives: Primitive[] = []
+  protected assets: Handle[] = []
 
-  public abstract buildGeometry(modelMatrix: Matrix4): Primitive[]
+  constructor(protected readonly scene: Scene) {}
 
-  public removeGeometry(scene: Scene): void {
-    this._primitives.forEach(p => {
-      scene.primitives.remove(p)
-      if(!p.isDestroyed()){
-        p.destroy()
+  abstract build(): void
+
+  getAssets(): Handle[] {
+    return this.assets
+  }
+
+  destroy(): void {
+    for (const handle of this.assets) {
+      for (const p of handle.primitives) {
+        this.scene.primitives.remove(p)
+        if (!p.isDestroyed()) p.destroy()
       }
-    })
-    this._primitives=[]
+    }
+    this.assets = []
   }
-  //不改变modelMatrix
-  public updateModelMatrix(modelMatrix: Matrix4): void {
-    this._primitives.forEach(p => {
-      p.modelMatrix=modelMatrix.clone()
-    })
-  }
-
-  public get primitives():ReadonlyArray<Primitive> {
-    return this._primitives
-  }
-
 }
