@@ -52,9 +52,8 @@ const primitive = new Primitive({
 });
 widget.scene.primitives.add(primitive);
 
-// onModelMatrixChange 是唯一对外推送口，宿主自行决定怎么消费
 const orbitControl = new OrbitControl(widget.canvas, widget.scene, widget.camera, {
-  onModelMatrixChange: (m) => Matrix4.clone(m, primitive.modelMatrix),
+  onChange: (m) => Matrix4.clone(m, primitive.modelMatrix),
 });
 orbitControl.bind(primitive.modelMatrix, 'translate');
 

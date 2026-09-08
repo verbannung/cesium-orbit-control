@@ -1,11 +1,12 @@
-import { Color, Matrix4, type Scene } from '@cesium/engine'
+import { Color, Matrix4, type Ray, type Scene } from '@cesium/engine'
 import type { FrameContext } from '../frame/gizmoFrame'
 import type { BaseGeometry } from './baseGeometry'
 import { applyHandleColor } from './geometryUtil'
-import type { HandleId, Mode } from './types'
+import type { Handle, HandleId, Mode } from './types'
 import { RotateGeometry } from './rotateGeometry'
 import { ScaleGeometry } from './scaleGeometry'
 import { TranslateGeometry } from './translateGeometry'
+import { getHandleId } from '../collision'
 
 const HIGHLIGHT_BRIGHTEN = 0.35
 // const INACTIVE_ALPHA = 0.35
@@ -15,6 +16,7 @@ export class GeometryManager {
 
   constructor(
     private readonly scene: Scene,
+    private readonly frameContext: FrameContext,
   ) {}
 
   setMode(mode: Mode): void {
@@ -24,25 +26,34 @@ export class GeometryManager {
   }
 
   //每一帧率更新
-  updateMatrix(frameContext: FrameContext): void {
+  updateMatrix(): void {
     if (!this.activeGeometry) return
     const assets = this.activeGeometry.getAssets()
     if (!assets) return
+    const ctx = this.frameContext
     for (const handle of assets) {
       for (const p of handle.primitives) {
-        if (handle.handleType==='axis') {
-                      p.modelMatrix = Matrix4.clone(frameContext.axisFlipMatrix, new Matrix4())
-
-        }
-
-        if (handle.handleType === 'view') {
-          p.modelMatrix = Matrix4.clone(frameContext.viewMatrix, new Matrix4())
-        }
-        else if (handle.handleType === 'plane'||handle.handleType === 'uniform') {
-          p.modelMatrix = Matrix4.clone(frameContext.gizmoMatrix, new Matrix4())
+        if (handle.handleType === 'axis') {
+          p.modelMatrix = Matrix4.clone(ctx.axisFlipMatrix, new Matrix4())
+        } else if (handle.handleType === 'view') {
+          p.modelMatrix = Matrix4.clone(ctx.viewMatrix, new Matrix4())
+        } else {
+          p.modelMatrix = Matrix4.clone(ctx.gizmoMatrix, new Matrix4())
         }
       }
     }
+  }
+
+  pick(worldRay: Ray): HandleId | null {
+    const assets = this.activeGeometry?.getAssets()
+    if (!assets?.length) return null
+    return getHandleId(worldRay, assets, this.frameContext)
+  }
+
+  getHandle(id: HandleId): Handle | null {
+    const assets = this.activeGeometry?.getAssets()
+    if (!assets) return null
+    return assets.find(h => h.id === id) ?? null
   }
 
 

@@ -25,6 +25,8 @@ export interface FrameContext {
   /** gizmoMatrix · axisFlip，轴/面手柄用 */
   axisFlipMatrix: Matrix4
   modelMatrix: Matrix4
+  /** 拖拽期间为 true：TRS 由 controller 写入，不再从 modelMatrix 分解，三脚架不翻转 */
+  tripodFrozen: boolean
 }
 
 const MIN_FRAME_SCALE = 1e-9
@@ -42,7 +44,6 @@ export class GizmoFrame {
 
   private axisFactor: Triple<number> = [1, 1, 1]
   private readonly axisFlip = Matrix3.clone(Matrix3.IDENTITY, new Matrix3())
-  private tripodFrozen = false
   private started = false
 
   private readonly frameContext: FrameContext = {
@@ -58,6 +59,7 @@ export class GizmoFrame {
     viewMatrix: new Matrix4(),
     axisFlipMatrix: new Matrix4(),
     modelMatrix: this.modelMatrix,
+    tripodFrozen: false,
   }
 
   constructor(
@@ -74,14 +76,6 @@ export class GizmoFrame {
     this.input.onPreRender(() => this.onPreRender())
   }
 
-  freezeTripod(): void {
-    this.tripodFrozen = true
-  }
-
-  releaseTripod(): void {
-    this.tripodFrozen = false
-  }
-
   getFrameContext(): FrameContext {
     return this.frameContext
   }
@@ -95,7 +89,7 @@ export class GizmoFrame {
     const ctx = this.frameContext
     let R: Matrix3
 
-    if (this.tripodFrozen) {
+    if (ctx.tripodFrozen) {
       this.computeModelMatrix()
       this.onModelMatrixChange?.(Matrix4.clone(this.modelMatrix, new Matrix4()))
       R = Matrix3.fromQuaternion(ctx.rotation, scratchR)
@@ -138,7 +132,7 @@ export class GizmoFrame {
     Matrix3.multiply(scratchScaledR, ctx.viewRotation, scratchViewScaledR)
     Matrix4.fromRotationTranslation(scratchViewScaledR, T, ctx.viewMatrix)
 
-    if (!this.tripodFrozen) this.recomputeTripod()
+    if (!ctx.tripodFrozen) this.recomputeTripod()
     Matrix4.multiply(
       ctx.gizmoMatrix,
       Matrix4.fromRotation(this.axisFlip, scratchFlipR),

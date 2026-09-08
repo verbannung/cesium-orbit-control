@@ -1,11 +1,11 @@
 import type { Camera, Matrix4, Scene } from '@cesium/engine'
-import { Context } from './centerController'
+import { CenterController } from './centerController'
 import { resolveOptions, type OrbitControlOptions } from './core/options'
-import type { Mode } from './core/types'
+import type { Mode } from './geometry/types'
 import { CesiumInputSource } from './input/cesiumInputSource'
 
 export class OrbitControl {
-  private readonly ctx: Context
+  private readonly ctx: CenterController
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -14,7 +14,7 @@ export class OrbitControl {
     options?: OrbitControlOptions,
   ) {
     const input = new CesiumInputSource(canvas, scene, camera)
-    this.ctx = new Context(input, scene, resolveOptions(options))
+    this.ctx = new CenterController(input, scene, resolveOptions(options))
   }
 
   /** modelMatrix 必须可分解为 T·R·S（无剪切、R 正交），否则抛错 */
@@ -23,7 +23,7 @@ export class OrbitControl {
   }
 
   setMode(mode: Mode): void {
-    this.ctx.updateMode(mode)
+    this.ctx.setMode(mode)
   }
 
   get currentMode(): Mode {
@@ -35,6 +35,5 @@ export class OrbitControl {
   }
 }
 
-export type { Mode, Handle, HandleId } from './core/types'
+export type { Mode, Handle, HandleId } from './geometry/types'
 export type { OrbitControlOptions, ResolvedOptions } from './core/options'
-// export { HANDLES } from './geometry/handles' — 已停用，见 geometryUtil / *Geometry

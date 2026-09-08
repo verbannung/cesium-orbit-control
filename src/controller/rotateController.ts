@@ -1,100 +1,88 @@
-import { Cartesian3, Matrix3, Quaternion, type Ray } from '@cesium/engine'
+import { Cartesian3, Quaternion, type Ray } from '@cesium/engine'
 import { intersectPlane } from '../math/ray'
 import { BaseController } from './baseController'
 import type { FrameContext } from '../frame/gizmoFrame'
-import { Handle } from '../geometry/types'
+import type { Handle } from '../geometry/types'
+import type { ResolvedOptions } from '../core/options'
 
 const scratchCurrent = new Cartesian3()
-const scratchPrevL = new Cartesian3()
-const scratchCurrL = new Cartesian3()
-// const scratchAxis = new Cartesian3()
+const scratchS = new Cartesian3()
+const scratchQ = new Cartesian3()
 const scratchCross = new Cartesian3()
 const scratchDelta = new Quaternion()
-const scratchNextDelta = new Quaternion()
 
 export class RotateController extends BaseController {
-  /** 上一帧交点，世界系，每帧推进 */
-  private readonly prevPoint = new Cartesian3()
-  /** 累积旋转增量，局部系 */
-  private readonly deltaRotation = Quaternion.clone(Quaternion.IDENTITY, new Quaternion())
-  /** 累积角度标量，供 overlay 显示度数 */
-  private angle = 0
-  /** 当前拖拽手柄 */
-  // private handle!: Handle
-  /** 旋转轴，局部系 */
-  private readonly axisLocalVec = new Cartesian3()
+  /** 旋转轴，世界系（= planeNormal，按 begin 时冻住） */
+  private readonly axisWorld = new Cartesian3()
+
+  /** unwrap 状态：上一帧的原始角（atan2 输出，∈ (−π, π]） */
+  private prevRaw = 0
+  /** 跨帧累计完整圈数 */
+  private turns = 0
+
+  constructor(options: ResolvedOptions) {
+    super(options)
+  }
 
   override begin(handle: Handle, pickRay: Ray, frame: FrameContext): boolean {
     if (!super.begin(handle, pickRay, frame)) return false
 
-    // this.handle = handle
-    Cartesian3.clone(this.startPoint, this.prevPoint)
-    Quaternion.clone(Quaternion.IDENTITY, this.deltaRotation)
-    this.angle = 0
+    // planeNormal 已在 super.begin 中转换为世界系单位向量
+    Cartesian3.clone(this.planeNormal, this.axisWorld)
+    this.prevRaw = 0
+    this.turns = 0
 
-    const axis = this.planeNormal
-    if (!axis) return false
-    Cartesian3.clone(axis, this.axisLocalVec)
+    // 半径守卫（相对形式）：起始交点离轴心太近则拖拽不稳定
+    // |s| 即环所在位置的半径（世界单位），minRotateRadius 是无量纲比值
+    Cartesian3.subtract(this.startPoint, this.startTranslation, scratchS)
+    if (Cartesian3.magnitude(scratchS) < this.options.minRotateRadius) return false
 
     return true
   }
 
   /**
-   * 由 prevPoint→current 求增量角，累积到 deltaRotation。
-   * 最终姿态 = startRotation ⊗ deltaRotation。
-   * 仅在返回非 null 时推进增量状态。
-   * 其中获得的是世界坐标系的 current，将 prev/current 相对中心的向量
-   * 转化到局部坐标系下，投影到旋转平面后计算旋转增量，刷入 frame.rotation。
+   * 旋转公式（世界系，减中心项后在旋转平面内）：
+   *   s = p₀ − T₀,  q = p − T₀         均 ⊥ axisWorld
+   *   θ_raw = atan2((s × q)·axisWorld, s·q) ∈ (−π, π]
+   *   跨帧 unwrap：d = θ_raw − prevRaw
+   *     d > π  → turns--（跨过 −π/π 边界向负方向转）
+   *     d < −π → turns++（跨过 −π/π 边界向正方向转）
+   *   θ = θ_raw + 2π·turns（总旋转角，支持多圈）
+   *   frame.rotation = fromAxisAngle(axisWorld, θ) ⊗ startRotation（世界轴左乘）
    */
   override compute(pickRay: Ray): void {
     const current = intersectPlane(pickRay, this.planeOrigin, this.planeNormal, scratchCurrent)
     if (!current) return
-    // if (Cartesian3.distance(current, this.startTranslation) < this.options.minRotateRadius) {
-    //   return
-    // }
 
-    const axis = this.axisLocalVec
+    const axis = this.axisWorld
     if (Cartesian3.magnitudeSquared(axis) < 1e-18) return
 
-    this.toOffsetLocal(this.prevPoint, scratchPrevL)
-    this.toOffsetLocal(current, scratchCurrL)
-    // projectOntoPlane(scratchPrevL, axis)
-    // projectOntoPlane(scratchCurrL, axis)
+    // 相对中心的偏移向量（⊥ axisWorld）
+    Cartesian3.subtract(this.startPoint, this.startTranslation, scratchS)
+    Cartesian3.subtract(current, this.startTranslation, scratchQ)
 
-    // if (
-    //   Cartesian3.magnitude(scratchPrevL) < this.options.minRotateRadius ||
-    //   Cartesian3.magnitude(scratchCurrL) < this.options.minRotateRadius
-    // ) {
-    //   return
-    // }
+    // 半径守卫：当前交点过近则跳过本帧
+    if (Cartesian3.magnitude(scratchQ) < this.options.minRotateRadius * Cartesian3.magnitude(scratchS)) return
 
-    const sin = Cartesian3.dot(Cartesian3.cross(scratchPrevL, scratchCurrL, scratchCross), axis)
-    const cos = Cartesian3.dot(scratchPrevL, scratchCurrL)
-    const dTheta = Math.atan2(sin, cos) //TODO atan存在-PI~PI跳变
+    const sinTheta = Cartesian3.dot(Cartesian3.cross(scratchS, scratchQ, scratchCross), axis)
+    const cosTheta = Cartesian3.dot(scratchS, scratchQ)
+    const rawTheta = Math.atan2(sinTheta, cosTheta) // ∈ (−π, π]
 
-      Quaternion.fromAxisAngle(axis, dTheta, scratchDelta)
-      Quaternion.multiply(this.deltaRotation, scratchDelta, scratchNextDelta)
-      Quaternion.clone(scratchNextDelta, this.deltaRotation)
-      Quaternion.multiply(this.startRotation, this.deltaRotation, this.frame.rotation)
-      this.angle += dTheta
+    // 跨帧 unwrap：检测 ±π 边界跳变
+    const d = rawTheta - this.prevRaw
+    if (d > Math.PI) this.turns--
+    else if (d < -Math.PI) this.turns++
+    this.prevRaw = rawTheta
 
+    const theta = rawTheta + 2 * Math.PI * this.turns
 
-    Cartesian3.clone(current, this.prevPoint)
+    // 世界轴左乘：R_total = R_delta · R_start
+    Quaternion.fromAxisAngle(axis, theta, scratchDelta)
+    Quaternion.multiply(scratchDelta, this.startRotation, this.frame.rotation)
   }
 
   end(): void {
-    Quaternion.clone(Quaternion.IDENTITY, this.deltaRotation)
-    this.angle = 0
-  }
-
-
-
-
-
-  private toOffsetLocal(world: Cartesian3, result: Cartesian3): Cartesian3 {
-    Cartesian3.subtract(world, this.startTranslation, result)
-    return Matrix3.multiplyByVector(this.R_WorldToLocal, result, result)
+    this.prevRaw = 0
+    this.turns = 0
   }
 }
-
-

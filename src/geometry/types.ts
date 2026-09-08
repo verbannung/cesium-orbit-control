@@ -1,5 +1,13 @@
 import { Color, Cartesian3, type Primitive } from '@cesium/engine'
 
+export type Triple<T> = [T, T, T]
+
+export const AXES: Triple<Cartesian3> = [
+  Cartesian3.UNIT_X,
+  Cartesian3.UNIT_Y,
+  Cartesian3.UNIT_Z,
+]
+
 export type Mode = 'translate' | 'rotate' | 'scale'
 
 /** 每个轴/手柄唯一标识 */

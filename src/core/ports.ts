@@ -1,4 +1,4 @@
-import type { Cartesian2, Cartesian3, Matrix4, Ray } from '@cesium/engine'
+import type { Cartesian2, Cartesian3, Ray } from '@cesium/engine'
 
 /** 唯一的 Cesium 适配面。EventManager 与 GizmoFrame 依赖它，不依赖 Scene/Camera
  * 该接口只暴露输入、相机以及像素投影等“输入源”能力。具体实现见 cesiumInputSource.ts

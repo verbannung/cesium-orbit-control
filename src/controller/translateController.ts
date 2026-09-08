@@ -1,98 +1,103 @@
-import { Cartesian3, Matrix3, type Matrix4, type Ray } from '@cesium/engine'
-import type { Constraint, Handle } from '../core/types'
-import type { OverlayState } from '../overlay/types'
+import { Cartesian3, Matrix3, type Ray } from '@cesium/engine'
 import { intersectPlane } from '../math/ray'
+import { axisOf, BaseController } from './baseController'
 import { snap } from '../math/snap'
-import { BaseController } from './baseController'
-import type { DragInput } from './types'
+import type { FrameContext } from '../frame/gizmoFrame'
+import type { Handle } from '../geometry/types'
+import type { ResolvedOptions } from '../core/options'
 
+const scratchCurrent = new Cartesian3()
 const scratchDeltaW = new Cartesian3()
 const scratchDeltaL = new Cartesian3()
-const scratchProj = new Cartesian3()
-const scratchAxis = new Cartesian3()
-const scratchT = new Cartesian3()
-const scratchLabelDelta = new Cartesian3()
+const scratchComp = new Cartesian3()
+const scratchResult = new Cartesian3()
 
 export class TranslateController extends BaseController {
-  /** 最近一次写出的位置，供 overlay 画起点→终点连线 */
-  private readonly currentTranslation = new Cartesian3()
+  /**
+   * 约束方向，局部系。
+   * axis 型：自由轴方向 a（单位向量）
+   * plane 型：约束基 c = basisLocal[0]（面法线，单位向量）
+   */
+  private readonly constraintLocal = new Cartesian3()
+  private constraintKind: 'axis' | 'plane' | 'free' = 'free'
 
-  override begin(dragInput: DragInput, handle: Handle): boolean {
-    if (!super.begin(dragInput, handle)) return false
-    Cartesian3.clone(this.startTranslation, this.currentTranslation)
+  constructor(options: ResolvedOptions) {
+    super(options)
+  }
+
+  override begin(handle: Handle, pickRay: Ray, frame: FrameContext): boolean {
+    if (!super.begin(handle, pickRay, frame)) return false
+
+    if (handle.handleType === 'axis') {
+      const axis = axisOf(handle)
+      if (!axis) return false
+      Cartesian3.clone(axis, this.constraintLocal)
+      this.constraintKind = 'axis'
+    } else if (handle.handleType === 'plane') {
+      Cartesian3.clone(handle.basisLocal[0], this.constraintLocal)
+      this.constraintKind = 'plane'
+    } else {
+      this.constraintKind = 'free'
+    }
+
     return true
   }
 
   /**
-   * deltaLocal = R_WorldToLocal · (current - startPoint)
-   * 按 constraint 投影：axis 保留该轴分量，plane 保留 u/v 两分量，screen 整平面。
-   * snap 作用于累积位移而非每帧增量
+   * 位移链路（局部系）：
+   *   Δ_W = p − p₀
+   *   Δ_L = R₀ᵀ Δ_W                    进入局部（纯旋转，不含 S）
+   *   axis : Δ_L ← (Δ_L·a)a            保留自由轴分量
+   *   plane: Δ_L ← Δ_L − (Δ_L·c)c     去掉约束基分量
+   *   ℓ = Δ_L ⊘ S₀                     世界长度 → 物体局部单位
+   *   ℓ_i ← snap(ℓ_i, translateSnap)   以物体局部单位对齐
+   *   Δ_L′ = ℓ ⊙ S₀
+   *   frame.translation = T₀ + R₀ Δ_L′
+   *
+   * 注：basisLocal 的各元素均为坐标轴，⊘S₀ 不会破坏约束方向正交性。
+   * 无 snap 时 S₀⁻¹·S₀ ≡ I，Δ_L′ = Δ_L，链路等价于直接世界位移。
+   * T 是纯世界量，写回 frame.translation 的是世界坐标。
    */
-  protected computeMatrix(pickRay: Ray): Matrix4 | null {
-    const current = intersectPlane(pickRay, this.planeOrigin, this.planeNormal)
-    if (!current) return null
+  override compute(pickRay: Ray): void {
+    const current = intersectPlane(pickRay, this.planeOrigin, this.planeNormal, scratchCurrent)
+    if (!current) return
 
+    // Δ_W = p − p₀
     Cartesian3.subtract(current, this.startPoint, scratchDeltaW)
 
-    const basis = constrainedBasis(this.constraint)
-    if (!basis) {
-      Cartesian3.add(this.startTranslation, scratchDeltaW, scratchT)
-    } else {
-      Matrix3.multiplyByVector(this.R_WorldToLocal, scratchDeltaW, scratchDeltaL)
-      Cartesian3.clone(Cartesian3.ZERO, scratchProj)
-      for (const b of basis) {
-        const c = snap(Cartesian3.dot(scratchDeltaL, b), this.options.translateSnap)
-        Cartesian3.multiplyByScalar(b, c, scratchAxis)
-        Cartesian3.add(scratchProj, scratchAxis, scratchProj)
+    // Δ_L = R₀ᵀ Δ_W
+    Matrix3.multiplyByVector(this.R_WorldToLocal, scratchDeltaW, scratchDeltaL)
+
+    // 约束投影（局部系，R₀ 正交保证投影有效）
+    if (this.constraintKind !== 'free') {
+      const c = this.constraintLocal
+      const proj = Cartesian3.dot(scratchDeltaL, c)
+      Cartesian3.multiplyByScalar(c, proj, scratchComp)
+      if (this.constraintKind === 'axis') {
+        Cartesian3.clone(scratchComp, scratchDeltaL)
+      } else {
+        // plane：去掉法线分量，保留面内分量
+        Cartesian3.subtract(scratchDeltaL, scratchComp, scratchDeltaL)
       }
-      Matrix3.multiplyByVector(this.R_LocalToWorld, scratchProj, scratchDeltaW)
-      Cartesian3.add(this.startTranslation, scratchDeltaW, scratchT)
     }
 
-    Cartesian3.clone(scratchT, this.currentTranslation)
-    return this.compose(scratchT, this.startRotation, this.startScale)
+    // ℓ = Δ_L ⊘ S₀（世界长度 → 物体局部单位），对约束方向 snap
+    const s = this.startScale
+    scratchResult.x = snap(scratchDeltaL.x / s.x, this.options.translateSnap)
+    scratchResult.y = snap(scratchDeltaL.y / s.y, this.options.translateSnap)
+    scratchResult.z = snap(scratchDeltaL.z / s.z, this.options.translateSnap)
+
+    // Δ_L′ = ℓ ⊙ S₀，回到世界长度
+    scratchResult.x *= s.x
+    scratchResult.y *= s.y
+    scratchResult.z *= s.z
+
+    // frame.translation = T₀ + R₀ Δ_L′
+    Matrix3.multiplyByVector(this.R_LocalToWorld, scratchResult, scratchDeltaW)
+    Cartesian3.add(this.startTranslation, scratchDeltaW, this.frame.translation)
   }
 
-  overlayState(): OverlayState {
-    Cartesian3.subtract(this.currentTranslation, this.startTranslation, scratchLabelDelta)
-    Matrix3.multiplyByVector(this.R_WorldToLocal, scratchLabelDelta, scratchLabelDelta)
-    return {
-      kind: 'translate',
-      startWorld: this.startTranslation,
-      endWorld: this.currentTranslation,
-      label: formatDelta(this.constraint, scratchLabelDelta),
-    }
-  }
-
-  end(): void {}
-}
-const AXIS_NAMES = 'XYZ'
-
-/** null 表示不受约束，直接沿视平面自由移动 */
-function constrainedBasis(constraint: Constraint): Cartesian3[] | null {
-  switch (constraint.kind) {
-    case 'axis':
-      return [constraint.axis]
-    case 'plane':
-      return [constraint.u, constraint.v]
-    default:
-      return null
+  end(): void {
+    this.constraintKind = 'free'
   }
 }
-
-function formatDelta(constraint: Constraint, deltaLocal: Cartesian3): string {
-  switch (constraint.kind) {
-    case 'axis':
-      return part(constraint.axisIndex, deltaLocal)
-    case 'plane':
-      return `${part((constraint.planeIndex + 1) % 3, deltaLocal)}  ${part((constraint.planeIndex + 2) % 3, deltaLocal)}`
-    default:
-      return `${part(0, deltaLocal)}  ${part(1, deltaLocal)}  ${part(2, deltaLocal)}`
-  }
-}
-
-function part(index: number, v: Cartesian3): string {
-  const value = index === 0 ? v.x : index === 1 ? v.y : v.z
-  return `${AXIS_NAMES[index]}: ${value.toFixed(3)}`
-}
-
