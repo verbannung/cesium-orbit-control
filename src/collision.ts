@@ -41,7 +41,7 @@ export function getHandleId(
 
   for (const handle of ordered) {
     const localRay = toHandleLocalRay(worldRay, handle, frame, meshRay)
-    const t = intersectMeshes(localRay, handle.meshes, cullBackFaces(handle.id))
+    const t = intersectMeshes(localRay, handle.meshes,frame.toCameraLocal ,cullBackFaces(handle.id))
     if (t === null) continue
 
     const pri = PICK_PRIORITY[handle.id]
@@ -51,6 +51,7 @@ export function getHandleId(
       bestId = handle.id
     }
   }
+    console.log(bestId)
 
   return bestId
 }
@@ -65,7 +66,7 @@ function toHandleLocalRay(
   frame: FrameContext,
   result: Ray,
 ): Ray {
-  Matrix4.inverseTransformation(matrixForHandleId(handle.id, frame), scratchInv)
+  Matrix4.inverse(matrixForHandleId(handle.id, frame), scratchInv)
   Matrix4.multiplyByPoint(scratchInv, worldRay.origin, result.origin)
   Matrix4.multiplyByPointAsVector(scratchInv, worldRay.direction, result.direction)
   return result
@@ -83,7 +84,8 @@ function matrixForHandleId(id: HandleId, frame: FrameContext): Matrix4 {
 function intersectMeshes(
   localRay: Ray,
   meshes: readonly MeshData[],
-  cull: boolean,
+  toCameraLocal:Cartesian3,
+  cullBackface = false
 ): number | null {
   let best = Infinity
 
@@ -96,14 +98,22 @@ function intersectMeshes(
         mesh.positions[mesh.indices[i]],
         mesh.positions[mesh.indices[i + 1]],
         mesh.positions[mesh.indices[i + 2]],
-        cull,
+        true,
       )
+
       if (t === undefined || t <= 0 || t >= best) continue
       best = t
     }
   }
+  const hit=best < Infinity ? best : null
+  if(cullBackface&&hit){
+      const hitPointLocal=Ray.getPoint(localRay, hit, new Cartesian3())
+      if (Cartesian3.dot(hitPointLocal,toCameraLocal)<0){
+          return null;
+      }
+  }
 
-  return best < Infinity ? best : null
+  return hit;
 }
 
 /** 旋转环单面剔除；方片与其余双面 */

@@ -118,7 +118,9 @@ export function buildRing(opts: {
     translucent: true,
     fabric: {
       type: `ring_${id}`,
-      uniforms: { u_color: Color.WHITE.withAlpha(0.9) },
+      uniforms: {
+        u_color: Color.WHITE.withAlpha(0.9),
+      },
       source: ringMaterial,
     },
   })
@@ -135,6 +137,7 @@ export function buildRing(opts: {
   })
   ;(appearance as MaterialAppearance & { uniforms: Record<string, number> }).uniforms = {
     u_halfWidthPx: RING_HALF_WIDTH_PX,
+    u_cullBackHalf: cullHalf ? 1 : 0,
   }
 
   const primitive = new Primitive({

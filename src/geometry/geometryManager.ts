@@ -56,6 +56,23 @@ export class GeometryManager {
     return assets.find(h => h.id === id) ?? null
   }
 
+  setRotateRingDragging(dragging: boolean): void {
+    const assets = this.activeGeometry?.getAssets()
+    if (!assets) return
+
+    for (const handle of assets) {
+      if (!isRotateAxis(handle.id)) continue
+      for (const primitive of handle.primitives) {
+        const uniforms = (primitive.appearance as {
+          uniforms?: Record<string, unknown>
+        }).uniforms
+        if (uniforms && 'u_cullBackHalf' in uniforms) {
+          uniforms.u_cullBackHalf = dragging ? 0 : 1
+        }
+      }
+    }
+  }
+
 
   highlight(handleId: HandleId | null): void {
     const assets = this.activeGeometry?.getAssets()
@@ -93,4 +110,8 @@ function highlightColor(base: Color): Color {
     Math.min(1, base.blue + HIGHLIGHT_BRIGHTEN),
     base.alpha,
   )
+}
+
+function isRotateAxis(id: HandleId): boolean {
+  return id === 'rotate-x' || id === 'rotate-y' || id === 'rotate-z'
 }

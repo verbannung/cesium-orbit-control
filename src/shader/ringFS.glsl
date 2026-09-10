@@ -1,9 +1,10 @@
 in float v_frontness;
 in float v_side;
+uniform float u_cullBackHalf;
 
 void main() {
   // 仅渲染朝向相机的一半圆环
-  if (v_frontness <= 0.0) {
+  if (u_cullBackHalf > 0.5 && v_frontness <= 0.0) {
     discard;
   }
 

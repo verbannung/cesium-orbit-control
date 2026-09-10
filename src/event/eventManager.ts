@@ -56,12 +56,14 @@ export class EventManager {
     }
 
     this.dragging = true
+    this.geometry.setRotateRingDragging(true)
     this.cameraEnabledBackup = this.input.getCameraEnabled()
     this.input.setCameraEnabled(false)
     this.geometry.highlight(handleId)
   }
 
   private onMove(screenPos: Cartesian2): void {
+
     const ray = this.input.getPickRay(screenPos)
     if (!ray) return
 
@@ -84,6 +86,7 @@ export class EventManager {
     this.input.setCameraEnabled(this.cameraEnabledBackup)
     this.geometry.highlight(null)
     this.dragging = false
+    this.geometry.setRotateRingDragging(false)
   }
 
   destroy(): void {
