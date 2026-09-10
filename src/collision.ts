@@ -74,8 +74,8 @@ function toHandleLocalRay(
 
 /** 与绘制选矩阵规则一致：view 用手系视平面，旋转环 / 均匀缩放用 gizmo，其余跟轴翻转 */
 function matrixForHandleId(id: HandleId, frame: FrameContext): Matrix4 {
-  if (id === 'translate-view' || id === 'rotate-view') return frame.viewMatrix
-  if (id === 'scale-uniform' || id === 'rotate-x' || id === 'rotate-y' || id === 'rotate-z') {
+  if (id === 'translate-view' || id === 'rotate-view'||id === 'scale-uniform') return frame.viewMatrix
+  if ( id === 'rotate-x' || id === 'rotate-y' || id === 'rotate-z') {
     return frame.gizmoMatrix
   }
   return frame.axisFlipMatrix

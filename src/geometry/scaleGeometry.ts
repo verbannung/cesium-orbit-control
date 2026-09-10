@@ -21,7 +21,7 @@ export class ScaleGeometry extends BaseGeometry {
       [Y, Z],
       Color.RED,
       buildBoxAxisMeshes(Y, Z),
-      buildBoxAxis(Y, Z),
+      buildBoxAxis(Y, Z, Color.RED),
         'axis'
     )
     const y = new Handle(
@@ -29,7 +29,7 @@ export class ScaleGeometry extends BaseGeometry {
       [Z, X],
       Color.LIME,
       buildBoxAxisMeshes(Z, X),
-      buildBoxAxis(Z, X),
+      buildBoxAxis(Z, X, Color.LIME),
                 'axis'
     )
     const z = new Handle(
@@ -37,7 +37,7 @@ export class ScaleGeometry extends BaseGeometry {
       [X,Y],
       Color.DODGERBLUE,
       buildBoxAxisMeshes(X, Y),
-      buildBoxAxis(X, Y),
+      buildBoxAxis(X, Y, Color.DODGERBLUE),
                 'axis'
 
     )
@@ -46,7 +46,12 @@ export class ScaleGeometry extends BaseGeometry {
       [Z],
       Color.WHITE,
       buildViewRingMeshes(X, Y, VIEW_AXIS_RADIUS),
-      buildViewRing(X, Y, { id: 'scale-uniform', radius: VIEW_AXIS_RADIUS, cullHalf: false }),
+      buildViewRing(X, Y, {
+        id: 'scale-uniform',
+        color: Color.WHITE,
+        radius: VIEW_AXIS_RADIUS,
+        cullHalf: false,
+      }),
                 'uniform'
     )
 

@@ -38,7 +38,7 @@ export const BOX_HALF = 0.05
 export const STEM_WIDTH_PX = 2
 export const TUBE_RADIUS = 0.03
 export const RING_RADIUS = 1.0
-export const VIEW_AXIS_RADIUS = 1.25
+export const VIEW_AXIS_RADIUS = 0.22
 export const VIEW_PLANE_RADIUS = 0.22
 export const RING_HALF_WIDTH_PX = 3
 export const PLANE_MIN = 0.4
@@ -109,17 +109,18 @@ export function buildRing(opts: {
   id: HandleId
   u: Cartesian3
   v: Cartesian3
+  color: Color
   radius?: number
   cullHalf: boolean
 }): Primitive[] {
-  const { id, u, v, cullHalf } = opts
+  const { id, u, v, color, cullHalf } = opts
   const radius = opts.radius ?? RING_RADIUS
   const material = new Material({
     translucent: true,
     fabric: {
       type: `ring_${id}`,
       uniforms: {
-        u_color: Color.WHITE.withAlpha(0.9),
+        u_color: color.withAlpha(0.9),
       },
       source: ringMaterial,
     },
@@ -207,15 +208,17 @@ function buildRingStrip(u: Cartesian3, v: Cartesian3, radius: number): Geometry 
  * 平移/通用视平面环。几何建在 u、v 张成的局部平面上。
  * 数据格式与 translateGeometry 一致：`(u, v) → Primitive[]`
  */
+
 export function buildViewRing(
   u: Cartesian3,
   v: Cartesian3,
-  opts: { id?: HandleId; radius?: number; cullHalf?: boolean } = {},
+  opts: { id?: HandleId; color: Color; radius?: number; cullHalf?: boolean },
 ): Primitive[] {
   return buildRing({
     id: opts.id ?? 'translate-view',
     u,
     v,
+    color: opts.color,
     radius: opts.radius ?? VIEW_PLANE_RADIUS,
     cullHalf: opts.cullHalf ?? false,
   })
@@ -225,6 +228,7 @@ export function buildViewRing(
  * 视平面环碰撞代理：圆环管。
  * 数据格式：`(u, v) → MeshData[]`
  */
+//TODO 支持整圆 以扩大碰撞体积
 export function buildViewRingMeshes(
   u: Cartesian3,
   v: Cartesian3,
@@ -242,10 +246,10 @@ export function buildViewRingMeshes(
  * 平移轴：线段 + 圆锥箭头。几何建在 u、v 张成平面的法向（u×v）上。
  * 数据格式：`(u, v) → Primitive[]`
  */
-export function buildHeadAxis(u: Cartesian3, v: Cartesian3): Primitive[] {
+export function buildHeadAxis(u: Cartesian3, v: Cartesian3, color: Color): Primitive[] {
   const direction = Cartesian3.cross(u, v, new Cartesian3())
   const attributes = {
-    color: ColorGeometryInstanceAttribute.fromColor(Color.WHITE),
+    color: ColorGeometryInstanceAttribute.fromColor(color),
   }
   const rotation = new Matrix3(
     u.x, v.x, direction.x,
@@ -326,10 +330,10 @@ export function buildHeadAxisMeshes(u: Cartesian3, v: Cartesian3): MeshData[] {
  * 缩放轴：线段 + 端点方块。几何建在 u、v 张成平面的法向（u×v）上。
  * 数据格式：`(u, v) → Primitive[]`
  */
-export function buildBoxAxis(u: Cartesian3, v: Cartesian3): Primitive[] {
+export function buildBoxAxis(u: Cartesian3, v: Cartesian3, color: Color): Primitive[] {
   const direction = Cartesian3.cross(u, v, new Cartesian3())
   const attributes = {
-    color: ColorGeometryInstanceAttribute.fromColor(Color.WHITE),
+    color: ColorGeometryInstanceAttribute.fromColor(color),
   }
 
   const stem = new Primitive({
@@ -389,11 +393,17 @@ export function buildBoxAxisMeshes(u: Cartesian3, v: Cartesian3): MeshData[] {
  * 旋转轴环（半环剔除）。几何建在 u、v 张成的局部平面上。
  * 数据格式：`(u, v, id) → Primitive[]`
  */
-export function buildRotateRing(u: Cartesian3, v: Cartesian3, id: HandleId): Primitive[] {
+export function buildRotateRing(
+  u: Cartesian3,
+  v: Cartesian3,
+  id: HandleId,
+  color: Color,
+): Primitive[] {
   return buildRing({
     id,
     u,
     v,
+    color,
     radius: RING_RADIUS,
     cullHalf: true,
   })

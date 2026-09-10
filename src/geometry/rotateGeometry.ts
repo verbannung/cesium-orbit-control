@@ -21,7 +21,7 @@ export class RotateGeometry extends BaseGeometry {
       [X],
       Color.RED,
       buildRotateRingMeshes(Y, Z),
-      buildRotateRing(Y, Z, 'rotate-x'),
+      buildRotateRing(Y, Z, 'rotate-x', Color.RED),
         'plane'
     )
     const y = new Handle(
@@ -29,7 +29,7 @@ export class RotateGeometry extends BaseGeometry {
       [Y],
       Color.LIME,
       buildRotateRingMeshes(Z, X),
-      buildRotateRing(Z, X, 'rotate-y'),
+      buildRotateRing(Z, X, 'rotate-y', Color.LIME),
         'plane'
     )
     const z = new Handle(
@@ -37,7 +37,7 @@ export class RotateGeometry extends BaseGeometry {
       [Z],
       Color.DODGERBLUE,
       buildRotateRingMeshes(X, Y),
-      buildRotateRing(X, Y, 'rotate-z'),
+      buildRotateRing(X, Y, 'rotate-z', Color.DODGERBLUE),
         'plane'
     )
     const view = new Handle(
@@ -45,7 +45,12 @@ export class RotateGeometry extends BaseGeometry {
       [Z],
       Color.WHITE,
       buildViewRingMeshes(X, Y, VIEW_AXIS_RADIUS),
-      buildViewRing(X, Y, { id: 'rotate-view', radius: VIEW_AXIS_RADIUS, cullHalf: false }),
+      buildViewRing(X, Y, {
+        id: 'rotate-view',
+        color: Color.WHITE,
+        radius: VIEW_AXIS_RADIUS,
+        cullHalf: false,
+      }),
         'view'
     )
 

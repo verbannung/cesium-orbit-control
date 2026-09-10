@@ -20,7 +20,7 @@ export class TranslateGeometry extends BaseGeometry {
       [Y, Z],
       Color.RED,
       buildHeadAxisMeshes(Y, Z),
-      buildHeadAxis(Y, Z),
+      buildHeadAxis(Y, Z, Color.RED),
         'axis'
     )
     const y = new Handle(
@@ -28,7 +28,7 @@ export class TranslateGeometry extends BaseGeometry {
       [Z, X],
       Color.LIME,
       buildHeadAxisMeshes(Z, X),
-      buildHeadAxis(Z, X),
+      buildHeadAxis(Z, X, Color.LIME),
         'axis'
     )
     const z = new Handle(
@@ -36,7 +36,7 @@ export class TranslateGeometry extends BaseGeometry {
       [X, Y],
       Color.DODGERBLUE,
       buildHeadAxisMeshes(X, Y),
-      buildHeadAxis(X, Y),
+      buildHeadAxis(X, Y, Color.DODGERBLUE),
         'axis'
     )
     const view = new Handle(
@@ -44,7 +44,7 @@ export class TranslateGeometry extends BaseGeometry {
       [X, Y],
       Color.WHITE,
       buildViewRingMeshes(X, Y),
-      buildViewRing(X, Y, { id: 'translate-view' }),
+      buildViewRing(X, Y, { id: 'translate-view', color: Color.WHITE }),
         'view'
     )
 

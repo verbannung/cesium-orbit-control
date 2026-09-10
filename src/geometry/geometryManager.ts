@@ -35,7 +35,7 @@ export class GeometryManager {
       for (const p of handle.primitives) {
         if (handle.handleType === 'axis') {
           p.modelMatrix = Matrix4.clone(ctx.axisFlipMatrix, new Matrix4())
-        } else if (handle.handleType === 'view') {
+        } else if (handle.handleType === 'view'||handle.handleType === 'uniform') {
           p.modelMatrix = Matrix4.clone(ctx.viewMatrix, new Matrix4())
         } else {
           p.modelMatrix = Matrix4.clone(ctx.gizmoMatrix, new Matrix4())
@@ -56,6 +56,7 @@ export class GeometryManager {
     return assets.find(h => h.id === id) ?? null
   }
 
+  //TODO 修改
   setRotateRingDragging(dragging: boolean): void {
     const assets = this.activeGeometry?.getAssets()
     if (!assets) return
@@ -78,11 +79,11 @@ export class GeometryManager {
     const assets = this.activeGeometry?.getAssets()
     if (!assets) return
 
- 
-
     for (const handle of assets) {
-      if (handle.id !== handleId) continue
-      applyHandleColor(handle, highlightColor(handle.color))
+      applyHandleColor(
+        handle,
+        handle.id === handleId ? highlightColor(handle.color) : handle.color,
+      )
     }
   }
 
