@@ -5,7 +5,6 @@ import {
   BoxGeometry,
   Cartesian3,
   Color,
-  ColorGeometryInstanceAttribute,
   ComponentDatatype,
   CylinderGeometry,
   Geometry,
@@ -17,8 +16,7 @@ import {
   MaterialAppearance,
   Matrix3,
   Matrix4,
-  PerInstanceColorAppearance,
-  PolylineColorAppearance,
+  PolylineMaterialAppearance,
   PolylineGeometry,
   Primitive,
   PrimitiveType,
@@ -77,18 +75,27 @@ export function bakeTransform(geometry: Geometry, modelMatrix: Matrix4): Geometr
   return instance.geometry
 }
 
-export function applyHandleColor(handle: Handle, color: Color): void {
-  const value = ColorGeometryInstanceAttribute.toValue(color)
+export function applyHandlePick(handle: Handle, picked: boolean): void {
   for (const p of handle.primitives) {
-    if (p.ready) {
-      const attrs = p.getGeometryInstanceAttributes(handle.id)
-      if (attrs?.color) attrs.color = value
-    }
-    const uniforms = (p.appearance as MaterialAppearance | undefined)?.material?.uniforms as
+    const uniforms = (p.appearance as { material?: Material } | undefined)?.material?.uniforms as
       | Record<string, unknown>
       | undefined
-    if (uniforms && 'u_color' in uniforms) uniforms.u_color = color
+    if (uniforms && 'u_pick' in uniforms) uniforms.u_pick = picked ? 1 : 0
   }
+}
+
+function createGizmoMaterial(color: Color): Material {
+  return new Material({
+    translucent: true,
+    fabric: {
+      type: 'gizmo_handle',
+      uniforms: {
+        u_color: color.withAlpha(0.9),
+        u_pick: 0,
+      },
+      source: ringMaterial,
+    },
+  })
 }
 
 /** 平面手柄四角：u/v 张成面上 [PLANE_MIN, PLANE_MAX] */
@@ -115,16 +122,7 @@ export function buildRing(opts: {
 }): Primitive[] {
   const { id, u, v, color, cullHalf } = opts
   const radius = opts.radius ?? RING_RADIUS
-  const material = new Material({
-    translucent: true,
-    fabric: {
-      type: `ring_${id}`,
-      uniforms: {
-        u_color: color.withAlpha(0.9),
-      },
-      source: ringMaterial,
-    },
-  })
+  const material = createGizmoMaterial(color)
 
   const appearance = new MaterialAppearance({
     material,
@@ -246,11 +244,12 @@ export function buildViewRingMeshes(
  * 平移轴：线段 + 圆锥箭头。几何建在 u、v 张成平面的法向（u×v）上。
  * 数据格式：`(u, v) → Primitive[]`
  */
-export function buildHeadAxis(u: Cartesian3, v: Cartesian3, color: Color): Primitive[] {
+export function buildHeadAxis(
+  u: Cartesian3,
+  v: Cartesian3,
+  color: Color,
+): Primitive[] {
   const direction = Cartesian3.cross(u, v, new Cartesian3())
-  const attributes = {
-    color: ColorGeometryInstanceAttribute.fromColor(color),
-  }
   const rotation = new Matrix3(
     u.x, v.x, direction.x,
     u.y, v.y, direction.y,
@@ -262,12 +261,14 @@ export function buildHeadAxis(u: Cartesian3, v: Cartesian3, color: Color): Primi
       geometry: new PolylineGeometry({
         positions: [Cartesian3.ZERO, pointAlong(direction, AXIS_LENGTH)],
         width: STEM_WIDTH_PX,
-        vertexFormat: PolylineColorAppearance.VERTEX_FORMAT,
+        vertexFormat: PolylineMaterialAppearance.VERTEX_FORMAT,
         arcType: ArcType.NONE,
       }),
-      attributes,
     }),
-    appearance: new PolylineColorAppearance({ translucent: true }),
+    appearance: new PolylineMaterialAppearance({
+      material: createGizmoMaterial(color),
+      translucent: true,
+    }),
     asynchronous: false,
     modelMatrix: new Matrix4(),
   })
@@ -281,7 +282,7 @@ export function buildHeadAxis(u: Cartesian3, v: Cartesian3, color: Color): Primi
             topRadius: 0.0,
             bottomRadius: HEAD_RADIUS,
             slices: HEAD_SLICES,
-            vertexFormat: PerInstanceColorAppearance.FLAT_VERTEX_FORMAT,
+            vertexFormat: MaterialAppearance.MaterialSupport.BASIC.vertexFormat,
           }),
         )!,
         Matrix4.fromRotationTranslation(
@@ -289,9 +290,10 @@ export function buildHeadAxis(u: Cartesian3, v: Cartesian3, color: Color): Primi
           pointAlong(direction, AXIS_LENGTH + HEAD_LEN / 2),
         ),
       ),
-      attributes,
     }),
-    appearance: new PerInstanceColorAppearance({
+    appearance: new MaterialAppearance({
+      material: createGizmoMaterial(color),
+      materialSupport: MaterialAppearance.MaterialSupport.BASIC,
       flat: true,
       translucent: true,
       renderState: OVERLAY,
@@ -332,21 +334,20 @@ export function buildHeadAxisMeshes(u: Cartesian3, v: Cartesian3): MeshData[] {
  */
 export function buildBoxAxis(u: Cartesian3, v: Cartesian3, color: Color): Primitive[] {
   const direction = Cartesian3.cross(u, v, new Cartesian3())
-  const attributes = {
-    color: ColorGeometryInstanceAttribute.fromColor(color),
-  }
 
   const stem = new Primitive({
     geometryInstances: new GeometryInstance({
       geometry: new PolylineGeometry({
         positions: [Cartesian3.ZERO, pointAlong(direction, AXIS_LENGTH)],
         width: STEM_WIDTH_PX,
-        vertexFormat: PolylineColorAppearance.VERTEX_FORMAT,
+        vertexFormat: PolylineMaterialAppearance.VERTEX_FORMAT,
         arcType: ArcType.NONE,
       }),
-      attributes,
     }),
-    appearance: new PolylineColorAppearance({ translucent: true }),
+    appearance: new PolylineMaterialAppearance({
+      material: createGizmoMaterial(color),
+      translucent: true,
+    }),
     asynchronous: false,
     modelMatrix: new Matrix4(),
   })
@@ -357,14 +358,15 @@ export function buildBoxAxis(u: Cartesian3, v: Cartesian3, color: Color): Primit
         BoxGeometry.createGeometry(
           BoxGeometry.fromDimensions({
             dimensions: new Cartesian3(BOX_HALF * 2, BOX_HALF * 2, BOX_HALF * 2),
-            vertexFormat: PerInstanceColorAppearance.FLAT_VERTEX_FORMAT,
+            vertexFormat: MaterialAppearance.MaterialSupport.BASIC.vertexFormat,
           }),
         )!,
         Matrix4.fromTranslation(pointAlong(direction, AXIS_LENGTH + BOX_HALF)),
       ),
-      attributes,
     }),
-    appearance: new PerInstanceColorAppearance({
+    appearance: new MaterialAppearance({
+      material: createGizmoMaterial(color),
+      materialSupport: MaterialAppearance.MaterialSupport.BASIC,
       flat: true,
       translucent: true,
       renderState: OVERLAY,

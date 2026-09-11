@@ -56,7 +56,7 @@ export class EventManager {
     }
 
     this.dragging = true
-    this.geometry.setRotateRingDragging(true)
+    this.geometry.isDragging(true, handleId)
     this.cameraEnabledBackup = this.input.getCameraEnabled()
     this.input.setCameraEnabled(false)
     this.geometry.highlight(handleId)
@@ -86,7 +86,7 @@ export class EventManager {
     this.input.setCameraEnabled(this.cameraEnabledBackup)
     this.geometry.highlight(null)
     this.dragging = false
-    this.geometry.setRotateRingDragging(false)
+    this.geometry.isDragging(false, null)
   }
 
   destroy(): void {

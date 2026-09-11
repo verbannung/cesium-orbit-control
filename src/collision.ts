@@ -3,11 +3,11 @@ import type { FrameContext } from './frame/gizmoFrame'
 import type { Handle, HandleId, MeshData } from './geometry/types'
 import { hitsBoundingSphere } from './math/ray'
 
-/** 拾取优先级：plane > axis > view > uniform */
+/** 拾取优先级： view = uniform >axis>plane */
 const PICK_PRIORITY: Record<HandleId, number> = {
-  'translate-xy': 3,
-  'translate-yz': 3,
-  'translate-zx': 3,
+  'translate-xy': 1,
+  'translate-yz': 1,
+  'translate-zx': 1,
   'translate-x': 2,
   'translate-y': 2,
   'translate-z': 2,
@@ -17,9 +17,9 @@ const PICK_PRIORITY: Record<HandleId, number> = {
   'scale-x': 2,
   'scale-y': 2,
   'scale-z': 2,
-  'translate-view': 1,
-  'rotate-view': 1,
-  'scale-uniform': 0,
+  'translate-view': 3,
+  'rotate-view': 3,
+  'scale-uniform': 3,
 }
 
 const scratchInv = new Matrix4()

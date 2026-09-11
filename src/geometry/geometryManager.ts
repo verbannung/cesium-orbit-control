@@ -1,15 +1,12 @@
-import { Color, Matrix4, type Ray, type Scene } from '@cesium/engine'
+import { Matrix4, type Ray, type Scene } from '@cesium/engine'
 import type { FrameContext } from '../frame/gizmoFrame'
 import type { BaseGeometry } from './baseGeometry'
-import { applyHandleColor } from './geometryUtil'
+import { applyHandlePick } from './geometryUtil'
 import type { Handle, HandleId, Mode } from './types'
 import { RotateGeometry } from './rotateGeometry'
 import { ScaleGeometry } from './scaleGeometry'
 import { TranslateGeometry } from './translateGeometry'
 import { getHandleId } from '../collision'
-
-const HIGHLIGHT_BRIGHTEN = 0.35
-// const INACTIVE_ALPHA = 0.35
 
 export class GeometryManager {
   activeGeometry: BaseGeometry | null = null
@@ -56,19 +53,21 @@ export class GeometryManager {
     return assets.find(h => h.id === id) ?? null
   }
 
-  //TODO 修改
-  setRotateRingDragging(dragging: boolean): void {
+
+  isDragging(dragging: boolean, activeHandleId: HandleId | null): void {
     const assets = this.activeGeometry?.getAssets()
     if (!assets) return
 
     for (const handle of assets) {
-      if (!isRotateAxis(handle.id)) continue
+      const isActive = dragging && handle.id === activeHandleId
       for (const primitive of handle.primitives) {
+        primitive.show = !dragging || isActive
+        if (!isRotateAxis(handle.id)) continue
         const uniforms = (primitive.appearance as {
           uniforms?: Record<string, unknown>
         }).uniforms
         if (uniforms && 'u_cullBackHalf' in uniforms) {
-          uniforms.u_cullBackHalf = dragging ? 0 : 1
+          uniforms.u_cullBackHalf = isActive ? 0 : 1
         }
       }
     }
@@ -80,10 +79,7 @@ export class GeometryManager {
     if (!assets) return
 
     for (const handle of assets) {
-      applyHandleColor(
-        handle,
-        handle.id === handleId ? highlightColor(handle.color) : handle.color,
-      )
+      applyHandlePick(handle, handle.id === handleId)
     }
   }
 
@@ -102,15 +98,6 @@ export function createGeometry(mode: Mode, scene: Scene): BaseGeometry {
     case 'scale':
       return new ScaleGeometry(scene)
   }
-}
-
-function highlightColor(base: Color): Color {
-  return new Color(
-    Math.min(1, base.red + HIGHLIGHT_BRIGHTEN),
-    Math.min(1, base.green + HIGHLIGHT_BRIGHTEN),
-    Math.min(1, base.blue + HIGHLIGHT_BRIGHTEN),
-    base.alpha,
-  )
 }
 
 function isRotateAxis(id: HandleId): boolean {

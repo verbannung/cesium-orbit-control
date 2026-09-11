@@ -41,7 +41,8 @@ export abstract class BaseController {
     const nLocal = this.buildHandlePlane(handle, this.toCameraLocal)
     if (!nLocal) return false
 
-    // 退化检查：局部系下法线与视线夹角过小说明面侧视/轴对准，交点不稳定
+    // 退化检查：局部系下法线与视线夹角过小说明面侧视/轴对准，交点不稳定 （射线和法线平行的情况）
+
     if (Math.abs(Cartesian3.dot(nLocal, this.toCameraLocal)) < this.options.degenerateThreshold) {
       return false
     }
