@@ -1,9 +1,11 @@
 import { Cartesian3, IntersectionTests, Matrix4, Ray } from '@cesium/engine'
-import type { FrameContext } from './frame/gizmoFrame'
-import type { Handle, HandleId, MeshData } from './geometry/types'
-import { hitsBoundingSphere } from './math/ray'
+import type { GeometryFrameContext } from '../core/frame'
+import type { HandleId } from '../core/types'
+import { hitsBoundingSphere } from '../math/ray'
+import { matrixForHandle, toCameraLocal } from './handleFrame'
+import type { Handle, MeshData } from './types'
 
-/** 拾取优先级： view = uniform >axis>plane */
+/** 拾取优先级： view = uniform > axis > plane */
 const PICK_PRIORITY: Record<HandleId, number> = {
   'translate-xy': 1,
   'translate-yz': 1,
@@ -23,37 +25,38 @@ const PICK_PRIORITY: Record<HandleId, number> = {
 }
 
 const scratchInv = new Matrix4()
+const scratchCamera = new Cartesian3()
 const meshRay = new Ray(new Cartesian3(), new Cartesian3())
 
 /**
- * 对当前手柄列表做射线拾取，返回命中的 HandleId。
- * 矩阵与绘制一致，按 handleId 选择。
+ * 对当前手柄列表做射线拾取，返回命中的 Handle。
+ * 使用与绘制完全相同的矩阵规则（见 matrixForHandle）。
  */
-export function getHandleId(
+export function pickHandle(
   worldRay: Ray,
   handles: readonly Handle[],
-  frame: FrameContext,
-): HandleId | null {
+  frame: GeometryFrameContext,
+): Handle | null {
   const ordered = sortHandle(handles)
-  let bestId: HandleId | null = null
+  const cameraLocal = toCameraLocal(frame, scratchCamera)
+  let best: Handle | null = null
   let bestT = Infinity
   let bestPri = -1
 
   for (const handle of ordered) {
     const localRay = toHandleLocalRay(worldRay, handle, frame, meshRay)
-    const t = intersectMeshes(localRay, handle.meshes,frame.toCameraLocal ,cullBackFaces(handle.id))
+    const t = intersectMeshes(localRay, handle.meshes, cameraLocal, cullBackFaces(handle.id))
     if (t === null) continue
 
     const pri = PICK_PRIORITY[handle.id]
     if (pri > bestPri || (pri === bestPri && t < bestT)) {
       bestPri = pri
       bestT = t
-      bestId = handle.id
+      best = handle
     }
   }
-    console.log(bestId)
 
-  return bestId
+  return best
 }
 
 export function sortHandle(handles: readonly Handle[]): Handle[] {
@@ -63,29 +66,20 @@ export function sortHandle(handles: readonly Handle[]): Handle[] {
 function toHandleLocalRay(
   worldRay: Ray,
   handle: Handle,
-  frame: FrameContext,
+  frame: GeometryFrameContext,
   result: Ray,
 ): Ray {
-  Matrix4.inverse(matrixForHandleId(handle.id, frame), scratchInv)
+  Matrix4.inverse(matrixForHandle(handle, frame), scratchInv)
   Matrix4.multiplyByPoint(scratchInv, worldRay.origin, result.origin)
   Matrix4.multiplyByPointAsVector(scratchInv, worldRay.direction, result.direction)
   return result
 }
 
-/** 与绘制选矩阵规则一致：view 用手系视平面，旋转环 / 均匀缩放用 gizmo，其余跟轴翻转 */
-function matrixForHandleId(id: HandleId, frame: FrameContext): Matrix4 {
-  if (id === 'translate-view' || id === 'rotate-view'||id === 'scale-uniform') return frame.viewMatrix
-  if ( id === 'rotate-x' || id === 'rotate-y' || id === 'rotate-z') {
-    return frame.gizmoMatrix
-  }
-  return frame.axisFlipMatrix
-}
-
 function intersectMeshes(
   localRay: Ray,
   meshes: readonly MeshData[],
-  toCameraLocal:Cartesian3,
-  cullBackface = false
+  cameraLocal: Cartesian3,
+  cullBackface = false,
 ): number | null {
   let best = Infinity
 
@@ -105,15 +99,14 @@ function intersectMeshes(
       best = t
     }
   }
-  const hit=best < Infinity ? best : null
-  if(cullBackface&&hit){
-      const hitPointLocal=Ray.getPoint(localRay, hit, new Cartesian3())
-      if (Cartesian3.dot(hitPointLocal,toCameraLocal)<0){
-          return null;
-      }
+
+  const hit = best < Infinity ? best : null
+  if (cullBackface && hit !== null) {
+    const hitPointLocal = Ray.getPoint(localRay, hit, new Cartesian3())
+    if (Cartesian3.dot(hitPointLocal, cameraLocal) < 0) return null
   }
 
-  return hit;
+  return hit
 }
 
 /** 旋转环单面剔除；方片与其余双面 */

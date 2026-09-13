@@ -1,35 +1,14 @@
-import { Color, Cartesian3, type Primitive } from '@cesium/engine'
+import type { Cartesian3, Color, Primitive } from '@cesium/engine'
+import type {
+  ControlMode,
+  HandleDescriptor,
+  HandleFrameKind,
+  HandleId,
+  ResolvedConstraint,
+} from '../core/types'
 
-export type Triple<T> = [T, T, T]
-
-export const AXES: Triple<Cartesian3> = [
-  Cartesian3.UNIT_X,
-  Cartesian3.UNIT_Y,
-  Cartesian3.UNIT_Z,
-]
-
-export type Mode = 'translate' | 'rotate' | 'scale'
-
-/** 每个轴/手柄唯一标识 */
-export type HandleId =
-  | 'translate-x'
-  | 'translate-y'
-  | 'translate-z'
-  | 'translate-xy'
-  | 'translate-yz'
-  | 'translate-zx'
-  | 'translate-view'
-  | 'rotate-x'
-  | 'rotate-y'
-  | 'rotate-z'
-  | 'rotate-view'
-  | 'scale-x'
-  | 'scale-y'
-  | 'scale-z'
-  | 'scale-uniform'
-
-export type HandleType = 'axis' | 'plane' | 'view' | 'uniform'
-
+export type { Triple, ControlMode, HandleId } from '../core/types'
+export { AXES } from '../core/types'
 
 export interface MeshData {
   positions: Cartesian3[]
@@ -37,28 +16,41 @@ export interface MeshData {
   boundingRadius: number
 }
 
-/** mesh / primitive 状态保存 */
+/**
+ * 一个手柄的渲染与拾取资产，外加创建时就解析好的 HandleDescriptor。
+ * 交互语义全部在 descriptor 里，几何资产只负责画和拾取。
+ */
 export class Handle {
-  readonly id: HandleId
-  readonly basisLocal: ReadonlyArray<Cartesian3>
-  readonly color: Color
-  primitives!: Primitive[]
+  readonly descriptor: HandleDescriptor
+  readonly frameKind: HandleFrameKind
   meshes: MeshData[]
-    handleType:HandleType
+  primitives: Primitive[]
 
   constructor(
     id: HandleId,
-    basisLocal: ReadonlyArray<Cartesian3>,
+    mode: ControlMode,
+    constraint: ResolvedConstraint,
     color: Color,
+    frameKind: HandleFrameKind,
     meshes: MeshData[],
     primitives: Primitive[],
-    handleType:HandleType
   ) {
-    this.id = id
-    this.basisLocal = basisLocal
-    this.color = color
+    this.descriptor = {
+      id,
+      mode,
+      constraint,
+      visual: { id, color },
+    }
+    this.frameKind = frameKind
     this.meshes = meshes
     this.primitives = primitives
-      this.handleType = handleType
+  }
+
+  get id(): HandleId {
+    return this.descriptor.id
+  }
+
+  get color(): Color {
+    return this.descriptor.visual.color
   }
 }

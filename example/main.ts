@@ -18,7 +18,7 @@ import {
 } from '@cesium/engine'
 import '@cesium/engine/Source/Widget/CesiumWidget.css'
 import { OrbitControl } from '../src/index'
-import type { Mode } from '../src/geometry/types'
+import type { ControlMode } from '../src/index'
 
 Ion.defaultAccessToken = import.meta.env.CESIUM_TOKEN
 
@@ -57,7 +57,7 @@ const orbitControl = new OrbitControl(widget.canvas, widget.scene, widget.camera
 });
 orbitControl.bind(primitive.modelMatrix, 'translate');
 
-const modes: Mode[] = ['translate', 'rotate', 'scale'];
+const modes: ControlMode[] = ['translate', 'rotate', 'scale'];
 
 const hint = document.createElement('div');
 hint.style.cssText =

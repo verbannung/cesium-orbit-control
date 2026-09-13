@@ -15,36 +15,39 @@ export class ScaleGeometry extends BaseGeometry {
     const Y = Cartesian3.UNIT_Y
     const Z = Cartesian3.UNIT_Z
 
-    // Handle(id, basisLocal, color, meshes, primitives)
     const x = new Handle(
       'scale-x',
-      [Y, Z],
+      'scale',
+      { kind: 'axis', axisLocal: X },
       Color.RED,
+      'axisFlip',
       buildBoxAxisMeshes(Y, Z),
       buildBoxAxis(Y, Z, Color.RED),
-        'axis'
     )
     const y = new Handle(
       'scale-y',
-      [Z, X],
+      'scale',
+      { kind: 'axis', axisLocal: Y },
       Color.LIME,
+      'axisFlip',
       buildBoxAxisMeshes(Z, X),
       buildBoxAxis(Z, X, Color.LIME),
-                'axis'
     )
     const z = new Handle(
       'scale-z',
-      [X,Y],
+      'scale',
+      { kind: 'axis', axisLocal: Z },
       Color.DODGERBLUE,
+      'axisFlip',
       buildBoxAxisMeshes(X, Y),
       buildBoxAxis(X, Y, Color.DODGERBLUE),
-                'axis'
-
     )
     const uniform = new Handle(
       'scale-uniform',
-      [Z],
+      'scale',
+      { kind: 'uniform' },
       Color.WHITE,
+      'view',
       buildViewRingMeshes(X, Y, VIEW_AXIS_RADIUS),
       buildViewRing(X, Y, {
         id: 'scale-uniform',
@@ -52,7 +55,6 @@ export class ScaleGeometry extends BaseGeometry {
         radius: VIEW_AXIS_RADIUS,
         cullHalf: false,
       }),
-                'uniform'
     )
 
     this.assets = [x, y, z, uniform]

@@ -1,95 +1,225 @@
-import { Cartesian3, Matrix3, type Ray } from '@cesium/engine'
-import { intersectPlane } from '../math/ray'
-import { axisOf, BaseController } from './baseController'
-import { snap } from '../math/snap'
-import type { FrameContext } from '../frame/gizmoFrame'
-import type { Handle, HandleType } from '../geometry/types'
+import { Cartesian3, Matrix4 } from '@cesium/engine'
+import type { ControllerFrameContext } from '../core/frame'
 import type { ResolvedOptions } from '../core/options'
+import type { PointerInput } from '../core/pointer'
+import type { SessionContext, WorldSegment } from '../core/snapshots'
+import type {
+  BaseTransformFrameState,
+  ScaleFrameState,
+  ScaleSpatialState,
+  ScaleTransformState,
+} from '../core/state'
+import { intersectPlane } from '../math/ray'
+import { snap } from '../math/snap'
+import { createBaseDetail, gizmoScale, localDirectionToWorld } from './detailFactory'
+import type { ScaleDetail, ScaleRuntime } from './details'
+import { InteractionController, type TransformResult } from './interactionController'
 
 /** 各轴分量下标 */
 const COMPONENTS = ['x', 'y', 'z'] as const
+const AXIS_GUIDE_LENGTH = 6
 
 const scratchCurrent = new Cartesian3()
-const scratchSL = new Cartesian3()
-const scratchQL = new Cartesian3()
+const scratchStartLocal = new Cartesian3()
+const scratchCurrentLocal = new Cartesian3()
 
-export class ScaleController extends BaseController {
-  private handleType: HandleType = 'axis'
-  /**
-   * 自由轴，局部系单位向量（axis 型）。
-   * axis 型的 basisLocal = [u, v] 是约束基，a = u × v 是自由轴。
-   */
-  private readonly axisLocal = new Cartesian3()
-  /**
-   * 自由轴对应的 scale 分量下标（0/1/2 → x/y/z），axis 型用。
-   * 用 argmax|a_i| 取主轴分量，因为 basisLocal 的轴均为坐标轴，结果精确。
-   */
-  private axisIndex = 0
-
-  constructor(options: ResolvedOptions) {
-    super(options)
+export class ScaleController extends InteractionController<
+  ScaleDetail,
+  ScaleRuntime,
+  ScaleTransformState,
+  ScaleSpatialState,
+  ScaleFrameState
+> {
+  constructor(private readonly options: ResolvedOptions) {
+    super()
   }
 
-  override begin(handle: Handle, pickRay: Ray, frame: FrameContext): boolean {
-    if (!super.begin(handle, pickRay, frame)) return false
+  protected createDetail(
+    input: PointerInput,
+    session: SessionContext,
+    frame: ControllerFrameContext,
+  ): ScaleDetail | null {
+    const seed = createBaseDetail(input, session, frame, this.options)
+    if (!seed) return null
 
-    this.handleType = handle.handleType
+    const constraint = session.handle.constraint
+    let resolved: ScaleDetail['constraint']
 
-    if (handle.handleType === 'axis') {
-      const axis = axisOf(handle)
-      if (!axis) return false
-      Cartesian3.clone(axis, this.axisLocal)
-      // 取主轴分量下标（basisLocal 均为坐标轴，|a_i| 中只有一个接近 1）
-      const ax = Math.abs(axis.x), ay = Math.abs(axis.y), az = Math.abs(axis.z)
-      this.axisIndex = ax >= ay && ax >= az ? 0 : ay >= az ? 1 : 2
+    if (constraint.kind === 'axis') {
+      const axisLocal = Cartesian3.clone(constraint.axisLocal, new Cartesian3())
+      const axisWorld = localDirectionToWorld(seed, axisLocal)
+      if (!axisWorld) return null
+
+      // 解析出的自由轴均为坐标轴，|a_i| 中只有一个接近 1，argmax 精确。
+      const ax = Math.abs(axisLocal.x)
+      const ay = Math.abs(axisLocal.y)
+      const az = Math.abs(axisLocal.z)
+      const axisIndex: 0 | 1 | 2 = ax >= ay && ax >= az ? 0 : ay >= az ? 1 : 2
+
+      startOffsetLocal(seed, seed.startPointWorld, scratchStartLocal)
+      resolved = {
+        kind: 'axis',
+        axisIndex,
+        axisLocal,
+        axisWorld,
+        startComponent: Cartesian3.dot(scratchStartLocal, axisLocal),
+      }
+    } else {
+      startOffsetLocal(seed, seed.startPointWorld, scratchStartLocal)
+      resolved = {
+        kind: 'uniform',
+        startRadiusWorld: Cartesian3.magnitude(scratchStartLocal),
+      }
     }
 
-    return true
+    return {
+      mode: 'scale',
+      startPointWorld: seed.startPointWorld,
+      planeOriginWorld: seed.planeOriginWorld,
+      planeNormalWorld: seed.planeNormalWorld,
+      localToWorldAtStart: seed.localToWorldAtStart,
+      worldToLocalAtStart: seed.worldToLocalAtStart,
+      startControl: seed.startControl,
+      constraint: resolved,
+    }
+  }
+
+  protected createRuntime(): ScaleRuntime {
+    return { revision: 0 }
   }
 
   /**
-   * 缩放比值公式（局部系，gizmoMatrix 不含物体 S，故 s_L/q_L 是纯旋转偏移）：
+   * 缩放比值公式（局部系，起始姿态为纯旋转，s_L/q_L 不含物体 S）：
    *   s_L = R₀ᵀ(p₀ − T₀),  q_L = R₀ᵀ(p − T₀)
    *   axis   : k = (q_L·a) / (s_L·a)  求交面含自由轴 a，分母不退化
    *   uniform: k = |q_L| / |s_L|       求交面即视平面，取径向模长比
    *
-   * k 是无量纲比值，不需要 ⊘S₀（分子分母在同一坐标系，换算会约掉）。
-   * k 的语义即"在该轴上放大 k 倍"，直接乘以 S₀ 得新缩放。
+   * k 是无量纲比值，不需要 ⊘S₀（分子分母同系，换算会约掉）。
    */
-  override compute(pickRay: Ray): void {
-    const current = intersectPlane(pickRay, this.planeOrigin, this.planeNormal, scratchCurrent)
-    if (!current) return
+  protected computeTransform(
+    input: PointerInput,
+    detail: ScaleDetail,
+  ): TransformResult<ScaleTransformState> | null {
+    const current = intersectPlane(
+      input.rayWorld,
+      detail.planeOriginWorld,
+      detail.planeNormalWorld,
+      scratchCurrent,
+    )
+    if (!current) return null
 
-    // 进入局部系（纯旋转，不含 S）
-    Matrix3.multiplyByVector(this.R_WorldToLocal, Cartesian3.subtract(this.startPoint, this.startTranslation, scratchSL), scratchSL)
-    Matrix3.multiplyByVector(this.R_WorldToLocal, Cartesian3.subtract(current, this.startTranslation, scratchQL), scratchQL)
+    startOffsetLocal(detail, current, scratchCurrentLocal)
 
-    let s: number, c: number
-    if (this.handleType === 'axis') {
-      const a = this.axisLocal
-      s = Cartesian3.dot(scratchSL, a)
-      c = Cartesian3.dot(scratchQL, a)
+    let denominator: number
+    let numerator: number
+    if (detail.constraint.kind === 'axis') {
+      denominator = detail.constraint.startComponent
+      numerator = Cartesian3.dot(scratchCurrentLocal, detail.constraint.axisLocal)
     } else {
-      // uniform：径向模长比
-      s = Cartesian3.magnitude(scratchSL)
-      c = Cartesian3.magnitude(scratchQL)
+      denominator = detail.constraint.startRadiusWorld
+      numerator = Cartesian3.magnitude(scratchCurrentLocal)
     }
 
-    if (Math.abs(s) < this.options.minScaleDenominator) return
+    if (Math.abs(denominator) < this.options.minScaleDenominator) return null
 
-    const k = snap(c / s, this.options.scaleSnap)
-    const scale = this.frame.scale
-    const s0 = this.startScale
+    const rawRatio = numerator / denominator
+    if (!Number.isFinite(rawRatio)) return null
+    const snappedRatio = snap(rawRatio, this.options.scaleSnap)
 
-    if (this.handleType === 'axis') {
-      const key = COMPONENTS[this.axisIndex]
-      scale[key] = Math.max(this.options.minScale, s0[key] * k)
+    const start = detail.startControl.scale
+    const resultingScale = Cartesian3.clone(start, new Cartesian3())
+    const appliedFactor = new Cartesian3(1, 1, 1)
+    const uniform = detail.constraint.kind === 'uniform'
+
+    const applyComponent = (index: 0 | 1 | 2): void => {
+      const key = COMPONENTS[index]
+      // minScale 之后逐轴 clamp，appliedFactor 因此可能与 snappedRatio 不同。
+      const applied = Math.max(this.options.minScale, start[key] * snappedRatio)
+      resultingScale[key] = applied
+      appliedFactor[key] = Math.abs(start[key]) > 1e-12 ? applied / start[key] : 1
+    }
+
+    if (detail.constraint.kind === 'axis') {
+      applyComponent(detail.constraint.axisIndex)
     } else {
-      scale.x = Math.max(this.options.minScale, s0.x * k)
-      scale.y = Math.max(this.options.minScale, s0.y * k)
-      scale.z = Math.max(this.options.minScale, s0.z * k)
+      applyComponent(0)
+      applyComponent(1)
+      applyComponent(2)
+    }
+
+    return {
+      transform: {
+        rawRatio,
+        snappedRatio,
+        appliedFactor,
+        resultingScale,
+        uniform,
+      },
+      control: {
+        translation: detail.startControl.translation,
+        rotation: detail.startControl.rotation,
+        scale: resultingScale,
+      },
+      pointerWorld: Cartesian3.clone(current, new Cartesian3()),
     }
   }
 
-  end(): void {}
+  protected buildWorldSpatialState(
+    result: TransformResult<ScaleTransformState>,
+    detail: ScaleDetail,
+    frame: ControllerFrameContext,
+  ): ScaleSpatialState {
+    const isAxis = detail.constraint.kind === 'axis'
+    const scale = gizmoScale(frame)
+
+    return {
+      startPointWorld: Cartesian3.clone(detail.startPointWorld, new Cartesian3()),
+      currentPointWorld: Cartesian3.clone(result.pointerWorld, new Cartesian3()),
+      axisGuideWorld:
+        detail.constraint.kind === 'axis'
+          ? segmentThrough(
+              detail.planeOriginWorld,
+              detail.constraint.axisWorld,
+              AXIS_GUIDE_LENGTH * scale,
+            )
+          : null,
+      movementArrowWorld: isAxis
+        ? null
+        : {
+            start: Cartesian3.clone(detail.startPointWorld, new Cartesian3()),
+            end: Cartesian3.clone(result.pointerWorld, new Cartesian3()),
+          },
+      labelAnchorWorld: Cartesian3.clone(result.pointerWorld, new Cartesian3()),
+    }
+  }
+
+  protected createFrameState(
+    base: BaseTransformFrameState,
+    transform: ScaleTransformState,
+    spatial: ScaleSpatialState,
+  ): ScaleFrameState {
+    return { ...base, mode: 'scale', transform, spatial }
+  }
+}
+
+/** (点 − T₀) 转到起始局部系。起始姿态为纯旋转，故结果不含物体 S。 */
+function startOffsetLocal(
+  detail: { planeOriginWorld: Cartesian3; worldToLocalAtStart: Matrix4 },
+  pointWorld: Cartesian3,
+  result: Cartesian3,
+): Cartesian3 {
+  Cartesian3.subtract(pointWorld, detail.planeOriginWorld, result)
+  return Matrix4.multiplyByPointAsVector(detail.worldToLocalAtStart, result, result)
+}
+
+function segmentThrough(
+  center: Cartesian3,
+  direction: Cartesian3,
+  halfLength: number,
+): WorldSegment {
+  const offset = Cartesian3.multiplyByScalar(direction, halfLength, new Cartesian3())
+  return {
+    start: Cartesian3.subtract(center, offset, new Cartesian3()),
+    end: Cartesian3.add(center, offset, new Cartesian3()),
+  }
 }

@@ -1,65 +1,81 @@
 import { Matrix4, type Ray, type Scene } from '@cesium/engine'
-import type { FrameContext } from '../frame/gizmoFrame'
+import type { GeometryFrameContext } from '../core/frame'
+import type { ControlMode, HandleDescriptor, HandleId } from '../core/types'
 import type { BaseGeometry } from './baseGeometry'
+import { pickHandle } from './collision'
 import { applyHandlePick } from './geometryUtil'
-import type { Handle, HandleId, Mode } from './types'
+import { matrixForHandle } from './handleFrame'
 import { RotateGeometry } from './rotateGeometry'
 import { ScaleGeometry } from './scaleGeometry'
 import { TranslateGeometry } from './translateGeometry'
-import { getHandleId } from '../collision'
 
+/**
+ * 当前模式下的 Gizmo 几何体、拾取与高亮。
+ * 只读取 GeometryFrameContext，不修改任何交互状态（架构 4.5）。
+ */
 export class GeometryManager {
-  activeGeometry: BaseGeometry | null = null
+  private activeGeometry: BaseGeometry | null = null
+  private activeHandleId: HandleId | null = null
+  private lastFrame: GeometryFrameContext | null = null
 
-  constructor(
-    private readonly scene: Scene,
-    private readonly frameContext: FrameContext,
-  ) {}
+  constructor(private readonly scene: Scene) {}
 
-  setMode(mode: Mode): void {
+  setMode(mode: ControlMode): void {
+    this.deactivate()
     this.activeGeometry?.destroy()
     this.activeGeometry = createGeometry(mode, this.scene)
     this.activeGeometry.build()
   }
 
-  //每一帧率更新
-  updateMatrix(): void {
-    if (!this.activeGeometry) return
-    const assets = this.activeGeometry.getAssets()
+  /** 拾取返回完整 HandleDescriptor，约束已在 Handle 创建时解析。 */
+  pick(worldRay: Ray): HandleDescriptor | null {
+    const assets = this.activeGeometry?.getAssets()
+    const frame = this.lastFrame
+    if (!assets?.length || !frame) return null
+    return pickHandle(worldRay, assets, frame)?.descriptor ?? null
+  }
+
+  /** 进入拖拽：只显示被拖的手柄，并高亮它。 */
+  activate(handle: HandleDescriptor): void {
+    this.activeHandleId = handle.id
+    this.applyVisibility()
+    this.highlight(handle.id)
+  }
+
+  deactivate(): void {
+    this.activeHandleId = null
+    this.applyVisibility()
+    this.highlight(null)
+  }
+
+  onFrame(frame: GeometryFrameContext): void {
+    this.lastFrame = frame
+    const assets = this.activeGeometry?.getAssets()
     if (!assets) return
-    const ctx = this.frameContext
+
     for (const handle of assets) {
-      for (const p of handle.primitives) {
-        if (handle.handleType === 'axis') {
-          p.modelMatrix = Matrix4.clone(ctx.axisFlipMatrix, new Matrix4())
-        } else if (handle.handleType === 'view'||handle.handleType === 'uniform') {
-          p.modelMatrix = Matrix4.clone(ctx.viewMatrix, new Matrix4())
-        } else {
-          p.modelMatrix = Matrix4.clone(ctx.gizmoMatrix, new Matrix4())
-        }
+      const matrix = matrixForHandle(handle, frame)
+      for (const primitive of handle.primitives) {
+        primitive.modelMatrix = Matrix4.clone(matrix, new Matrix4())
       }
     }
   }
 
-  pick(worldRay: Ray): HandleId | null {
+  highlight(handleId: HandleId | null): void {
     const assets = this.activeGeometry?.getAssets()
-    if (!assets?.length) return null
-    return getHandleId(worldRay, assets, this.frameContext)
+    if (!assets) return
+    for (const handle of assets) {
+      applyHandlePick(handle, handle.id === handleId)
+    }
   }
 
-  getHandle(id: HandleId): Handle | null {
-    const assets = this.activeGeometry?.getAssets()
-    if (!assets) return null
-    return assets.find(h => h.id === id) ?? null
-  }
-
-
-  isDragging(dragging: boolean, activeHandleId: HandleId | null): void {
+  private applyVisibility(): void {
     const assets = this.activeGeometry?.getAssets()
     if (!assets) return
 
+    const dragging = this.activeHandleId !== null
     for (const handle of assets) {
-      const isActive = dragging && handle.id === activeHandleId
+      const isActive = dragging && handle.id === this.activeHandleId
       for (const primitive of handle.primitives) {
         primitive.show = !dragging || isActive
         if (!isRotateAxis(handle.id)) continue
@@ -73,23 +89,15 @@ export class GeometryManager {
     }
   }
 
-
-  highlight(handleId: HandleId | null): void {
-    const assets = this.activeGeometry?.getAssets()
-    if (!assets) return
-
-    for (const handle of assets) {
-      applyHandlePick(handle, handle.id === handleId)
-    }
-  }
-
   destroy(): void {
     this.activeGeometry?.destroy()
     this.activeGeometry = null
+    this.lastFrame = null
+    this.activeHandleId = null
   }
 }
 
-export function createGeometry(mode: Mode, scene: Scene): BaseGeometry {
+export function createGeometry(mode: ControlMode, scene: Scene): BaseGeometry {
   switch (mode) {
     case 'translate':
       return new TranslateGeometry(scene)

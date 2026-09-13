@@ -24,6 +24,6 @@
     },
     "types": ["vitest/globals", "node"]
   },
-  "include": ["src_copy", "tests", "example", "vite.config.ts", "vitest.config.ts", "example/vite.config.ts", "src/controller", "src/core", "src/event", "src/frame", "src/geometry", "src/input", "src/math", "src/overlay", "src/pick", "src/centerController.ts", "src/glsl.d.ts", "src/index.ts"],
+  "include": ["src", "tests", "example", "vite.config.ts", "vitest.config.ts", "example/vite.config.ts"],
   "exclude": ["dist", "node_modules"]
 }

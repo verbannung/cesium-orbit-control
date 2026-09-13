@@ -14,38 +14,42 @@ export class TranslateGeometry extends BaseGeometry {
     const Y = Cartesian3.UNIT_Y
     const Z = Cartesian3.UNIT_Z
 
-    // Handle(id, basisLocal, color, meshes, primitives)
+    // 约束在此解析一次：轴手柄的自由轴即 u × v（架构不变量 9）。
     const x = new Handle(
       'translate-x',
-      [Y, Z],
+      'translate',
+      { kind: 'axis', axisLocal: X },
       Color.RED,
+      'axisFlip',
       buildHeadAxisMeshes(Y, Z),
       buildHeadAxis(Y, Z, Color.RED),
-        'axis'
     )
     const y = new Handle(
       'translate-y',
-      [Z, X],
+      'translate',
+      { kind: 'axis', axisLocal: Y },
       Color.LIME,
+      'axisFlip',
       buildHeadAxisMeshes(Z, X),
       buildHeadAxis(Z, X, Color.LIME),
-        'axis'
     )
     const z = new Handle(
       'translate-z',
-      [X, Y],
+      'translate',
+      { kind: 'axis', axisLocal: Z },
       Color.DODGERBLUE,
+      'axisFlip',
       buildHeadAxisMeshes(X, Y),
       buildHeadAxis(X, Y, Color.DODGERBLUE),
-        'axis'
     )
     const view = new Handle(
       'translate-view',
-      [X, Y],
+      'translate',
+      { kind: 'view' },
       Color.WHITE,
+      'view',
       buildViewRingMeshes(X, Y),
       buildViewRing(X, Y, { id: 'translate-view', color: Color.WHITE }),
-        'view'
     )
 
     this.assets = [x, y, z, view]
