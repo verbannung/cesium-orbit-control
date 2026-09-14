@@ -22,14 +22,13 @@ export interface WorldPolygon {
   readonly points: readonly Cartesian3[]
 }
 
+//T R S
 export interface ControlSnapshot {
   readonly translation: Cartesian3
   readonly rotation: Quaternion
   readonly scale: Cartesian3
 }
 
-/** Geometry 与外部对象在一帧内应观察到的生效 TRS。 */
-export type EffectiveControlState = ControlSnapshot
 
 export interface CameraSnapshot {
   readonly positionWorld: Cartesian3
@@ -37,7 +36,7 @@ export interface CameraSnapshot {
   readonly upWorld: Cartesian3
   readonly rightWorld: Cartesian3
   readonly viewMatrix: Matrix4
-  readonly projectionMatrix: Matrix4
+  readonly projectionMatrix: Matrix4 //MVP之中ProjectionMatrix 投影矩阵，支持正摄投影/透视投影
 }
 
 export interface ViewportSnapshot {
@@ -50,7 +49,6 @@ export interface SessionStartSnapshot {
   readonly control: ControlSnapshot
   readonly camera: CameraSnapshot
   readonly viewport: ViewportSnapshot
-  readonly environmentRevision: number
 }
 
 export interface SessionContext {

@@ -52,7 +52,7 @@ export type {
 export type {
   CameraSnapshot,
   ControlSnapshot,
-  EffectiveControlState,
+  ControlSnapshot,
   SessionContext,
   SessionId,
   SessionStartSnapshot,

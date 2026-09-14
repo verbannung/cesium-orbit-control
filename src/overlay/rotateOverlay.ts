@@ -17,10 +17,8 @@ import {
   strokeSegment,
 } from './screen'
 
-/** 屏幕上两点重合到这个距离内就认为该方向投影退化成一个点。 */
 const DEGENERATE_PX_SQUARED = 16
 
-/** 画 Controller 已生成的旋转圆环、扇区与轴向引导。 */
 export class RotateOverlay implements Overlay<RotateFrameState> {
   constructor(private readonly context: CanvasRenderingContext2D) {}
 

@@ -2,7 +2,6 @@ import type { Cartesian2, Cartesian3, Matrix4 } from '@cesium/engine'
 import type {
   CameraSnapshot,
   ControlSnapshot,
-  EffectiveControlState,
   ViewportSnapshot,
 } from './snapshots'
 
@@ -19,7 +18,7 @@ export interface FrameEnvironment {
  */
 export interface ControllerFrameContext {
   readonly environment: FrameEnvironment
-  readonly committedControl: ControlSnapshot
+  readonly committedControl: ControlSnapshot //模型 R/S/T
   readonly gizmoMatrix: Matrix4
   readonly viewMatrix: Matrix4
   readonly axisFlipMatrix: Matrix4
@@ -32,7 +31,7 @@ export interface ControllerFrameContext {
 /** Geometry 的帧切片：只读矩阵与生效控制状态，不含交互语义。 */
 export interface GeometryFrameContext {
   readonly environment: FrameEnvironment
-  readonly effectiveControl: EffectiveControlState
+  readonly effectiveControl: ControlSnapshot
   readonly gizmoMatrix: Matrix4
   readonly viewMatrix: Matrix4
   readonly axisFlipMatrix: Matrix4

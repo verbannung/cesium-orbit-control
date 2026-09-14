@@ -32,6 +32,15 @@ export class CesiumInputSource implements InputSource {
 
   bindEvents(handlers: PointerHandlers): () => void {
     const sse = new ScreenSpaceEventHandler(this.canvas)
+    const notifyEnvironmentChange = (): void => handlers.onEnvironmentChange?.()
+    const removeCameraChanged = this.camera.changed.addEventListener(notifyEnvironmentChange)
+    const view = this.canvas.ownerDocument?.defaultView
+    view?.addEventListener('resize', notifyEnvironmentChange)
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(notifyEnvironmentChange)
+        : undefined
+    resizeObserver?.observe(this.canvas)
 
     sse.setInputAction(
       (e: ScreenSpaceEventHandler.PositionedEvent) => {
@@ -106,6 +115,9 @@ export class CesiumInputSource implements InputSource {
         }
       }
       if (!sse.isDestroyed()) sse.destroy()
+      removeCameraChanged?.()
+      view?.removeEventListener('resize', notifyEnvironmentChange)
+      resizeObserver?.disconnect()
     }
   }
 

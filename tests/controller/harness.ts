@@ -95,7 +95,6 @@ export function session(
       control,
       camera,
       viewport,
-      environmentRevision: 0,
     },
   }
 }

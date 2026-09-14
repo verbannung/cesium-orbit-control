@@ -1,6 +1,6 @@
 import type { Cartesian3, Quaternion } from '@cesium/engine'
 import type {
-  EffectiveControlState,
+  ControlSnapshot,
   SessionId,
   WorldPolygon,
   WorldPolyline,
@@ -12,7 +12,7 @@ export interface BaseTransformFrameState {
   readonly sessionId: SessionId
   readonly revision: number
   readonly handle: HandleVisualDescriptor
-  readonly effectiveControl: EffectiveControlState
+  readonly effectiveControl: ControlSnapshot
 }
 
 /* ------------------------------- translate ------------------------------- */
@@ -118,7 +118,6 @@ export interface ScaleFrameState extends BaseTransformFrameState {
   readonly spatial: ScaleSpatialState
 }
 
-/** Controller 对外发布的唯一交互结果，mode 是可辨识联合的判别字段。 */
 export type TransformFrameState =
   | TranslateFrameState
   | RotateFrameState

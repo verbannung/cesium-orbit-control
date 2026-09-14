@@ -79,7 +79,6 @@ export class OverlayManager {
     this.overlayFor(state).render(frame)
   }
 
-  /** mode 判别 + 返回已收窄的 Overlay，调用点因此无需断言。 */
   private overlayFor(state: TransformFrameState): OverlayRenderer {
     switch (state.mode) {
       case 'translate':

@@ -47,4 +47,6 @@ export interface PointerHandlers {
   onUp(input: PointerInput | null): void
   /** 输入序列被浏览器取消或意外丢失 pointer capture 时调用。 */
   onCancel(): void
+  /** 相机或视口环境变化时调用。 */
+  onEnvironmentChange?(): void
 }

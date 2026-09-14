@@ -28,9 +28,9 @@ export type HandleId =
   | 'scale-z'
   | 'scale-uniform'
 
+
 /**
- * Handle 创建时就把约束解析成轴/平面/视图/均匀，Controller 与 Overlay
- * 都不再从 basisLocal 重新推导（架构不变量 9）。
+ * 约束
  */
 export type ResolvedConstraint =
   | {
@@ -51,6 +51,7 @@ export type ResolvedConstraint =
     }
 
 /** Overlay 能看到的 Handle 信息：只有身份和颜色，没有 constraint。 */
+//TODO 等待删除
 export interface HandleVisualDescriptor {
   readonly id: HandleId
   readonly color: Color
@@ -61,6 +62,7 @@ export interface HandleDescriptor {
   readonly id: HandleId
   readonly mode: ControlMode
   readonly constraint: ResolvedConstraint
+    readonly color:Color
   readonly visual: HandleVisualDescriptor
 }
 

@@ -30,7 +30,6 @@ export class CenterController {
     this.geometryManager = new GeometryManager(scene)
     this.overlayManager = new OverlayManager(input, options)
     this.renderSystem = new RenderSystem(input, options, {
-      onBeforeFrame: () => this.eventManager.syncEnvironment(),
       onGeometryFrame: (frame) => this.geometryManager.onFrame(frame),
       onOverlayFrame: (frame, state) => this.overlayManager.onFrame(frame, state),
       onModelMatrix: (matrix) => this.emitModelMatrix(matrix),
@@ -55,7 +54,7 @@ export class CenterController {
       rotation: Quaternion.fromRotationMatrix(decomposed.R, new Quaternion()),
       scale: Cartesian3.clone(decomposed.S, new Cartesian3()),
     }
-    this.renderSystem.init(control)
+    this.renderSystem.bind(control)
     this.setMode(mode)
   }
 
@@ -64,7 +63,6 @@ export class CenterController {
     this.geometryManager.setMode(mode)
     this.overlayManager.setMode(mode)
     this.eventManager.setMode(mode)
-    this.renderSystem.invalidate()
   }
 
   private emitModelMatrix(modelMatrix: Matrix4): void {

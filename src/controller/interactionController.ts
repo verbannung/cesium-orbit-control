@@ -13,9 +13,7 @@ export interface TransformResult<TTransform> {
   readonly pointerWorld: Cartesian3
 }
 
-/**
- * EventManager 看到的非泛型 Controller 接口：只关心会话编排，不关心模式细节。
- */
+
 export interface SessionController {
   begin(
     input: PointerInput,

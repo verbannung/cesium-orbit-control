@@ -19,7 +19,6 @@ interface ActiveInteraction {
   readonly session: SessionContext
   readonly controller: SessionController
   latestState: TransformFrameState | null
-  environmentRevision: number
 }
 
 /**
@@ -30,7 +29,7 @@ interface ActiveInteraction {
  */
 export class EventManager {
   private controller: SessionController
-  private active: ActiveInteraction | null = null
+  private active: ActiveInteraction | null = null //移动点击轴被激活
   private lastInput: PointerInput | null = null
   private cameraEnabledBackup = true
   private unbind: (() => void) | null = null
@@ -69,6 +68,7 @@ export class EventManager {
     if (!handle) return
 
     const session: SessionContext = {
+        //TODO 是否需要引用计数
       id: `session-${++this.sessionCounter}`,
       mode: this.mode,
       handle,
@@ -83,14 +83,12 @@ export class EventManager {
       session,
       controller: this.controller,
       latestState: state,
-      environmentRevision: session.start.environmentRevision,
     }
 
     this.render.publishInteraction(state)
     this.geometry.activate(handle)
     this.cameraEnabledBackup = this.input.getCameraEnabled()
     this.input.setCameraEnabled(false)
-    this.render.invalidate()
   }
 
   private onPointerMove(input: PointerInput): void {
@@ -127,7 +125,6 @@ export class EventManager {
     if (!active) return
     this.active = null
 
-    this.render.restoreControl(active.session.start.control)
     try {
       active.controller.cancel()
     } finally {
@@ -144,10 +141,6 @@ export class EventManager {
     const active = this.active
     if (!active) return
 
-    const revision = this.render.environmentRevision
-    if (revision === active.environmentRevision) return
-    active.environmentRevision = revision
-
     const frame = this.render.createControllerFrame()
     // 优先只重建 spatial；若会话尚无成功结果，则用保留的 lastInput 重算一帧。
     const state =
@@ -161,7 +154,6 @@ export class EventManager {
   private teardown(): void {
     this.input.setCameraEnabled(this.cameraEnabledBackup)
     this.geometry.deactivate()
-    this.render.invalidate()
   }
 
   destroy(): void {
