@@ -3,22 +3,22 @@ import type { ControllerFrameContext } from '../core/frame'
 import type { ResolvedOptions } from '../core/options'
 import type { PointerInput } from '../core/pointer'
 import type {
+  ControlSnapshot,
   SessionContext,
   WorldPolygon,
   WorldPolyline,
   WorldSegment,
 } from '../core/snapshots'
 import type {
-  BaseTransformFrameState,
-  RotateFrameState,
+  DragComputeResult,
   RotateSpatialState,
   RotateTransformState,
 } from '../core/state'
 import { RING_RADIUS, VIEW_AXIS_RADIUS } from '../geometry/geometryUtil'
 import { intersectPlane } from '../math/ray'
-import { createBaseDetail, gizmoScale, normalizeOrNull } from './detailFactory'
+import { createDragDetailSeed, gizmoScale, normalizeOrNull } from './dragMath'
 import type { RotateDetail, RotateRuntime } from './details'
-import { InteractionController, type TransformResult } from './interactionController'
+import { DragSession } from './dragSession'
 
 const RING_SEGMENTS = 64
 const LONG_AXIS_EXTENT = 6
@@ -30,13 +30,15 @@ const scratchQ = new Cartesian3()
 const scratchCross = new Cartesian3()
 const scratchRotated = new Cartesian3()
 
-export class RotateController extends InteractionController<
-  RotateDetail,
-  RotateRuntime,
-  RotateTransformState,
-  RotateSpatialState,
-  RotateFrameState
-> {
+interface TransformResult {
+  readonly transform: RotateTransformState
+  readonly control: ControlSnapshot
+  readonly pointerWorld: Cartesian3
+}
+
+export class RotateController extends DragSession<RotateDetail> {
+  private runtime: RotateRuntime | null = null
+
   constructor(private readonly options: ResolvedOptions) {
     super()
   }
@@ -46,10 +48,10 @@ export class RotateController extends InteractionController<
     session: SessionContext,
     frame: ControllerFrameContext,
   ): RotateDetail | null {
-    const seed = createBaseDetail(input, session, frame, this.options)
+    const seed = createDragDetailSeed(input, session, frame, this.options)
     if (!seed) return null
 
-    // 旋转平面的法线就是旋转轴，createBaseDetail 已按此规则建面。
+    // 旋转平面的法线就是旋转轴，createDragDetailSeed 已按此规则建面。
     const axisWorld = Cartesian3.clone(seed.planeNormalWorld, new Cartesian3())
     const axisLocal = Cartesian3.clone(seed.planeNormalLocal, new Cartesian3())
 
@@ -84,8 +86,12 @@ export class RotateController extends InteractionController<
     }
   }
 
-  protected createRuntime(): RotateRuntime {
-    return { revision: 0, previousRawAngle: 0, completedTurns: 0 }
+  protected onBegin(): void {
+    this.runtime = { previousRawAngle: 0, completedTurns: 0 }
+  }
+
+  protected onReset(): void {
+    this.runtime = null
   }
 
   /**
@@ -98,11 +104,11 @@ export class RotateController extends InteractionController<
    *   θ = θ_raw + 2π·turns（总旋转角，支持多圈）
    *   R = fromAxisAngle(axisWorld, θ) ⊗ R₀（世界轴左乘）
    */
-  protected computeTransform(
+  private computeTransform(
     input: PointerInput,
     detail: RotateDetail,
     runtime: RotateRuntime,
-  ): TransformResult<RotateTransformState> | null {
+  ): TransformResult | null {
     const current = intersectPlane(
       input.rayWorld,
       detail.planeOriginWorld,
@@ -162,8 +168,25 @@ export class RotateController extends InteractionController<
     }
   }
 
-  protected buildWorldSpatialState(
-    result: TransformResult<RotateTransformState>,
+  protected computeFrame(
+    input: PointerInput,
+    detail: RotateDetail,
+    session: SessionContext,
+    frame: ControllerFrameContext,
+  ): DragComputeResult | null {
+    const runtime = this.runtime
+    if (!runtime) return null
+    const result = this.computeTransform(input, detail, runtime)
+    if (!result) return null
+    const spatial = this.buildWorldSpatialState(result, detail, frame)
+    return {
+      effectiveControl: result.control,
+      overlay: { handle: session.handle, mode: 'rotate', transform: result.transform, spatial },
+    }
+  }
+
+  private buildWorldSpatialState(
+    result: TransformResult,
     detail: RotateDetail,
     frame: ControllerFrameContext,
   ): RotateSpatialState {
@@ -200,13 +223,6 @@ export class RotateController extends InteractionController<
     }
   }
 
-  protected createFrameState(
-    base: BaseTransformFrameState,
-    transform: RotateTransformState,
-    spatial: RotateSpatialState,
-  ): RotateFrameState {
-    return { ...base, mode: 'rotate', transform, spatial }
-  }
 }
 
 function buildRing(

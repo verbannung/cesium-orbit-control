@@ -1,18 +1,23 @@
 import type { Cartesian3, Quaternion } from '@cesium/engine'
 import type {
   ControlSnapshot,
-  SessionId,
   WorldPolygon,
   WorldPolyline,
   WorldSegment,
 } from './snapshots'
-import type { HandleVisualDescriptor } from './types'
+import type { HandleDescriptor } from './types'
 
-export interface BaseTransformFrameState {
-  readonly sessionId: SessionId
-  readonly revision: number
-  readonly handle: HandleVisualDescriptor
+/** Controller 已完成语义计算、专供 Overlay 绘制的当前拖拽数据。 */
+export interface BaseDragOverlayState {
+  readonly handle: HandleDescriptor
+}
+
+/** 一次拖拽计算唯一跨越 Controller/RenderSystem 边界的结果。 */
+export interface DragComputeResult {
+  /** Geometry、宿主模型与下一帧控制计算使用的实际 TRS。 */
   readonly effectiveControl: ControlSnapshot
+  /** Overlay 需要的已解析世界空间图元与显示语义。 */
+  readonly overlay: DragOverlayState
 }
 
 /* ------------------------------- translate ------------------------------- */
@@ -49,7 +54,7 @@ export interface TranslateSpatialState {
   readonly labelAnchorWorld: Cartesian3
 }
 
-export interface TranslateFrameState extends BaseTransformFrameState {
+export interface TranslateOverlayState extends BaseDragOverlayState {
   readonly mode: 'translate'
   readonly transform: TranslateTransformState
   readonly spatial: TranslateSpatialState
@@ -82,7 +87,7 @@ export interface RotateSpatialState {
   readonly labelAnchorWorld: Cartesian3
 }
 
-export interface RotateFrameState extends BaseTransformFrameState {
+export interface RotateOverlayState extends BaseDragOverlayState {
   readonly mode: 'rotate'
   readonly transform: RotateTransformState
   readonly spatial: RotateSpatialState
@@ -112,13 +117,13 @@ export interface ScaleSpatialState {
   readonly labelAnchorWorld: Cartesian3
 }
 
-export interface ScaleFrameState extends BaseTransformFrameState {
+export interface ScaleOverlayState extends BaseDragOverlayState {
   readonly mode: 'scale'
   readonly transform: ScaleTransformState
   readonly spatial: ScaleSpatialState
 }
 
-export type TransformFrameState =
-  | TranslateFrameState
-  | RotateFrameState
-  | ScaleFrameState
+export type DragOverlayState =
+  | TranslateOverlayState
+  | RotateOverlayState
+  | ScaleOverlayState

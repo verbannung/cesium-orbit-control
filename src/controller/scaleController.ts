@@ -2,18 +2,17 @@ import { Cartesian3, Matrix4 } from '@cesium/engine'
 import type { ControllerFrameContext } from '../core/frame'
 import type { ResolvedOptions } from '../core/options'
 import type { PointerInput } from '../core/pointer'
-import type { SessionContext, WorldSegment } from '../core/snapshots'
+import type { ControlSnapshot, SessionContext, WorldSegment } from '../core/snapshots'
 import type {
-  BaseTransformFrameState,
-  ScaleFrameState,
+  DragComputeResult,
   ScaleSpatialState,
   ScaleTransformState,
 } from '../core/state'
 import { intersectPlane } from '../math/ray'
 import { snap } from '../math/snap'
-import { createBaseDetail, gizmoScale, localDirectionToWorld } from './detailFactory'
-import type { ScaleDetail, ScaleRuntime } from './details'
-import { InteractionController, type TransformResult } from './interactionController'
+import { createDragDetailSeed, gizmoScale, localDirectionToWorld } from './dragMath'
+import type { ScaleDetail } from './details'
+import { DragSession } from './dragSession'
 
 /** 各轴分量下标 */
 const COMPONENTS = ['x', 'y', 'z'] as const
@@ -23,13 +22,13 @@ const scratchCurrent = new Cartesian3()
 const scratchStartLocal = new Cartesian3()
 const scratchCurrentLocal = new Cartesian3()
 
-export class ScaleController extends InteractionController<
-  ScaleDetail,
-  ScaleRuntime,
-  ScaleTransformState,
-  ScaleSpatialState,
-  ScaleFrameState
-> {
+interface TransformResult {
+  readonly transform: ScaleTransformState
+  readonly control: ControlSnapshot
+  readonly pointerWorld: Cartesian3
+}
+
+export class ScaleController extends DragSession<ScaleDetail> {
   constructor(private readonly options: ResolvedOptions) {
     super()
   }
@@ -39,7 +38,7 @@ export class ScaleController extends InteractionController<
     session: SessionContext,
     frame: ControllerFrameContext,
   ): ScaleDetail | null {
-    const seed = createBaseDetail(input, session, frame, this.options)
+    const seed = createDragDetailSeed(input, session, frame, this.options)
     if (!seed) return null
 
     const constraint = session.handle.constraint
@@ -84,10 +83,6 @@ export class ScaleController extends InteractionController<
     }
   }
 
-  protected createRuntime(): ScaleRuntime {
-    return { revision: 0 }
-  }
-
   /**
    * 缩放比值公式（局部系，起始姿态为纯旋转，s_L/q_L 不含物体 S）：
    *   s_L = R₀ᵀ(p₀ − T₀),  q_L = R₀ᵀ(p − T₀)
@@ -96,10 +91,10 @@ export class ScaleController extends InteractionController<
    *
    * k 是无量纲比值，不需要 ⊘S₀（分子分母同系，换算会约掉）。
    */
-  protected computeTransform(
+  private computeTransform(
     input: PointerInput,
     detail: ScaleDetail,
-  ): TransformResult<ScaleTransformState> | null {
+  ): TransformResult | null {
     const current = intersectPlane(
       input.rayWorld,
       detail.planeOriginWorld,
@@ -164,8 +159,23 @@ export class ScaleController extends InteractionController<
     }
   }
 
-  protected buildWorldSpatialState(
-    result: TransformResult<ScaleTransformState>,
+  protected computeFrame(
+    input: PointerInput,
+    detail: ScaleDetail,
+    session: SessionContext,
+    frame: ControllerFrameContext,
+  ): DragComputeResult | null {
+    const result = this.computeTransform(input, detail)
+    if (!result) return null
+    const spatial = this.buildWorldSpatialState(result, detail, frame)
+    return {
+      effectiveControl: result.control,
+      overlay: { handle: session.handle, mode: 'scale', transform: result.transform, spatial },
+    }
+  }
+
+  private buildWorldSpatialState(
+    result: TransformResult,
     detail: ScaleDetail,
     frame: ControllerFrameContext,
   ): ScaleSpatialState {
@@ -193,13 +203,6 @@ export class ScaleController extends InteractionController<
     }
   }
 
-  protected createFrameState(
-    base: BaseTransformFrameState,
-    transform: ScaleTransformState,
-    spatial: ScaleSpatialState,
-  ): ScaleFrameState {
-    return { ...base, mode: 'scale', transform, spatial }
-  }
 }
 
 /** (点 − T₀) 转到起始局部系。起始姿态为纯旋转，故结果不含物体 S。 */

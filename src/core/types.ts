@@ -50,20 +50,12 @@ export type ResolvedConstraint =
       readonly kind: 'uniform'
     }
 
-/** Overlay 能看到的 Handle 信息：只有身份和颜色，没有 constraint。 */
-//TODO 等待删除
-export interface HandleVisualDescriptor {
-  readonly id: HandleId
-  readonly color: Color
-}
-
 /** Controller 能看到的完整 Handle 信息。 */
 export interface HandleDescriptor {
   readonly id: HandleId
   readonly mode: ControlMode
   readonly constraint: ResolvedConstraint
-    readonly color:Color
-  readonly visual: HandleVisualDescriptor
+  readonly color: Color
 }
 
 /**

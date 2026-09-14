@@ -1,7 +1,7 @@
 import type { OverlayFrameContext } from '../core/frame'
 import type { ResolvedOptions } from '../core/options'
 import type { InputSource } from '../core/ports'
-import type { TransformFrameState } from '../core/state'
+import type { DragOverlayState } from '../core/state'
 import type { ControlMode } from '../core/types'
 import type { Overlay } from './overlay'
 import { RotateOverlay } from './rotateOverlay'
@@ -11,7 +11,7 @@ import { TranslateOverlay } from './translateOverlay'
 const OVERLAY_CLASS_NAME = 'cesium-orbit-control-overlay'
 
 /**
- * 持有唯一的临时 Canvas 图层，并按 TransformFrameState.mode 把状态路由给具体 Overlay。
+ * 持有唯一的临时 Canvas 图层，并按 DragOverlayState.mode 把状态路由给具体 Overlay。
  * 类型通过 mode 判别收窄，不使用断言（架构 6.7）。
  */
 export class OverlayManager {
@@ -68,7 +68,7 @@ export class OverlayManager {
   }
 
   /** 每帧一次：先清空，再按发布状态重绘。state 为 null 表示没有活动交互。 */
-  onFrame(frame: OverlayFrameContext, state: TransformFrameState | null): void {
+  onFrame(frame: OverlayFrameContext, state: DragOverlayState | null): void {
     if (this.disposed) return
 
     this.mountCanvas()
@@ -79,7 +79,7 @@ export class OverlayManager {
     this.overlayFor(state).render(frame)
   }
 
-  private overlayFor(state: TransformFrameState): OverlayRenderer {
+  private overlayFor(state: DragOverlayState): OverlayRenderer {
     switch (state.mode) {
       case 'translate':
         return { render: (frame) => this.translate.render(frame, state) }

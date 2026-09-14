@@ -7,7 +7,7 @@ import type { CameraSnapshot, ViewportSnapshot } from './snapshots'
  * 该接口只暴露输入、相机以及像素投影等"输入源"能力。实现见 cesiumInputSource.ts
  */
 export interface InputSource {
-  /** 注册 canvas 事件与 window 兜底事件，返回解绑函数 */
+  /** 注册 canvas 事件，返回解绑函数 */
   bindEvents(handlers: PointerHandlers): () => void
 
   /** 注册 preRender 回调 */
@@ -45,8 +45,4 @@ export interface PointerHandlers {
   onDown(input: PointerInput): void
   onMove(input: PointerInput): void
   onUp(input: PointerInput | null): void
-  /** 输入序列被浏览器取消或意外丢失 pointer capture 时调用。 */
-  onCancel(): void
-  /** 相机或视口环境变化时调用。 */
-  onEnvironmentChange?(): void
 }

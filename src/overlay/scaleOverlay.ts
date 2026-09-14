@@ -1,7 +1,7 @@
 import { Cartesian3, type Cartesian2 } from '@cesium/engine'
 import type { OverlayFrameContext } from '../core/frame'
 import type { WorldSegment } from '../core/snapshots'
-import type { ScaleFrameState } from '../core/state'
+import type { ScaleOverlayState } from '../core/state'
 import type { Overlay } from './overlay'
 import {
   drawArrowHead,
@@ -15,10 +15,10 @@ import {
 const DASH_PATTERN = [7, 5]
 
 /** 画一次缩放拖拽的轴引导、移动箭头与比例读数。 */
-export class ScaleOverlay implements Overlay<ScaleFrameState> {
+export class ScaleOverlay implements Overlay<ScaleOverlayState> {
   constructor(private readonly context: CanvasRenderingContext2D) {}
 
-  render(frame: OverlayFrameContext, state: ScaleFrameState): void {
+  render(frame: OverlayFrameContext, state: ScaleOverlayState): void {
     const context = this.context
     const color = state.handle.color.toCssColorString()
     const spatial = state.spatial
@@ -75,7 +75,7 @@ export class ScaleOverlay implements Overlay<ScaleFrameState> {
  * appliedFactor 的三个分量中只有被拖的轴会偏离 1（uniform 时三个一起变）。
  * 选一个分量显示是排版决定，不是对缩放语义的二次推导。
  */
-function displayFactor(state: ScaleFrameState): number {
+function displayFactor(state: ScaleOverlayState): number {
   const factor = state.transform.appliedFactor
   if (state.transform.uniform) return factor.x
   const components: readonly (keyof Pick<Cartesian3, 'x' | 'y' | 'z'>)[] = ['x', 'y', 'z']

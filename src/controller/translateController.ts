@@ -2,10 +2,9 @@ import { Cartesian3, Matrix4 } from '@cesium/engine'
 import type { ControllerFrameContext } from '../core/frame'
 import type { ResolvedOptions } from '../core/options'
 import type { PointerInput } from '../core/pointer'
-import type { SessionContext, WorldPolygon, WorldPolyline, WorldSegment } from '../core/snapshots'
+import type { ControlSnapshot, SessionContext, WorldPolygon, WorldPolyline, WorldSegment } from '../core/snapshots'
 import type {
-  BaseTransformFrameState,
-  TranslateFrameState,
+  DragComputeResult,
   TranslateGuideWorld,
   TranslateSpatialState,
   TranslateTransformState,
@@ -14,13 +13,13 @@ import { AXES } from '../core/types'
 import { intersectPlane } from '../math/ray'
 import { snap } from '../math/snap'
 import {
-  createBaseDetail,
+  createDragDetailSeed,
   gizmoScale,
   localDirectionToWorld,
   normalizeOrNull,
-} from './detailFactory'
-import type { TranslateDetail, TranslateRuntime } from './details'
-import { InteractionController, type TransformResult } from './interactionController'
+} from './dragMath'
+import type { TranslateDetail } from './details'
+import { DragSession } from './dragSession'
 
 const AXIS_GUIDE_LENGTH = 1.5
 const PLANE_GUIDE_SIZE = 0.55
@@ -33,13 +32,13 @@ const scratchDeltaL = new Cartesian3()
 const scratchComp = new Cartesian3()
 const scratchApplied = new Cartesian3()
 
-export class TranslateController extends InteractionController<
-  TranslateDetail,
-  TranslateRuntime,
-  TranslateTransformState,
-  TranslateSpatialState,
-  TranslateFrameState
-> {
+interface TransformResult {
+  readonly transform: TranslateTransformState
+  readonly control: ControlSnapshot
+  readonly pointerWorld: Cartesian3
+}
+
+export class TranslateController extends DragSession<TranslateDetail> {
   constructor(private readonly options: ResolvedOptions) {
     super()
   }
@@ -49,7 +48,7 @@ export class TranslateController extends InteractionController<
     session: SessionContext,
     frame: ControllerFrameContext,
   ): TranslateDetail | null {
-    const seed = createBaseDetail(input, session, frame, this.options)
+    const seed = createDragDetailSeed(input, session, frame, this.options)
     if (!seed) return null
 
     const constraint = session.handle.constraint
@@ -84,10 +83,6 @@ export class TranslateController extends InteractionController<
     }
   }
 
-  protected createRuntime(): TranslateRuntime {
-    return { revision: 0 }
-  }
-
   /**
    * 位移链路（局部系）：
    *   Δ_W = p − p₀
@@ -101,10 +96,10 @@ export class TranslateController extends InteractionController<
    *
    * 无 snap 时 S₀⁻¹·S₀ ≡ I，Δ_L′ = Δ_L，链路等价于直接世界位移。
    */
-  protected computeTransform(
+  private computeTransform(
     input: PointerInput,
     detail: TranslateDetail,
-  ): TransformResult<TranslateTransformState> | null {
+  ): TransformResult | null {
     const current = intersectPlane(
       input.rayWorld,
       detail.planeOriginWorld,
@@ -163,8 +158,23 @@ export class TranslateController extends InteractionController<
     }
   }
 
-  protected buildWorldSpatialState(
-    result: TransformResult<TranslateTransformState>,
+  protected computeFrame(
+    input: PointerInput,
+    detail: TranslateDetail,
+    session: SessionContext,
+    frame: ControllerFrameContext,
+  ): DragComputeResult | null {
+    const result = this.computeTransform(input, detail)
+    if (!result) return null
+    const spatial = this.buildWorldSpatialState(result, detail, frame)
+    return {
+      effectiveControl: result.control,
+      overlay: { handle: session.handle, mode: 'translate', transform: result.transform, spatial },
+    }
+  }
+
+  private buildWorldSpatialState(
+    result: TransformResult,
     detail: TranslateDetail,
     frame: ControllerFrameContext,
   ): TranslateSpatialState {
@@ -209,13 +219,6 @@ export class TranslateController extends InteractionController<
     }
   }
 
-  protected createFrameState(
-    base: BaseTransformFrameState,
-    transform: TranslateTransformState,
-    spatial: TranslateSpatialState,
-  ): TranslateFrameState {
-    return { ...base, mode: 'translate', transform, spatial }
-  }
 }
 
 function segmentThrough(

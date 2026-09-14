@@ -23,9 +23,6 @@ export interface ControllerFrameContext {
   readonly viewMatrix: Matrix4
   readonly axisFlipMatrix: Matrix4
 
-  worldToLocalPoint(point: Cartesian3, result: Cartesian3): Cartesian3
-  localToWorldPoint(point: Cartesian3, result: Cartesian3): Cartesian3
-  localToWorldVector(vector: Cartesian3, result: Cartesian3): Cartesian3
 }
 
 /** Geometry 的帧切片：只读矩阵与生效控制状态，不含交互语义。 */
@@ -40,7 +37,7 @@ export interface GeometryFrameContext {
 /**
  * Overlay 的帧切片：只有屏幕能力。
  * 故意不提供 gizmoMatrix / viewMatrix / axisFlipMatrix /
- * screenToWorldRay / worldToLocalPoint / localToWorldPoint，
+ * screenToWorldRay，
  * 从类型层面阻止 Overlay 重新推导交互语义。
  */
 export interface OverlayFrameContext {

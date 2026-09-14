@@ -1,7 +1,7 @@
 import type { Cartesian2 } from '@cesium/engine'
 import type { OverlayFrameContext } from '../core/frame'
 import type { WorldSegment } from '../core/snapshots'
-import type { RotateFrameState } from '../core/state'
+import type { RotateOverlayState } from '../core/state'
 import type { Overlay } from './overlay'
 import {
   distanceSquared,
@@ -19,10 +19,10 @@ import {
 
 const DEGENERATE_PX_SQUARED = 16
 
-export class RotateOverlay implements Overlay<RotateFrameState> {
+export class RotateOverlay implements Overlay<RotateOverlayState> {
   constructor(private readonly context: CanvasRenderingContext2D) {}
 
-  render(frame: OverlayFrameContext, state: RotateFrameState): void {
+  render(frame: OverlayFrameContext, state: RotateOverlayState): void {
     const context = this.context
     const color = state.handle.color.toCssColorString()
     const spatial = state.spatial

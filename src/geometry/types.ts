@@ -39,7 +39,7 @@ export class Handle {
       id,
       mode,
       constraint,
-      visual: { id, color },
+      color,
     }
     this.frameKind = frameKind
     this.meshes = meshes
@@ -51,6 +51,6 @@ export class Handle {
   }
 
   get color(): Color {
-    return this.descriptor.visual.color
+    return this.descriptor.color
   }
 }

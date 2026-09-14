@@ -45,16 +45,13 @@ export type {
   HandleDescriptor,
   HandleFrameKind,
   HandleId,
-  HandleVisualDescriptor,
   ResolvedConstraint,
 } from './core/types'
 
 export type {
   CameraSnapshot,
   ControlSnapshot,
-  ControlSnapshot,
   SessionContext,
-  SessionId,
   SessionStartSnapshot,
   ViewportSnapshot,
   WorldPolygon,
@@ -70,15 +67,16 @@ export type {
 } from './core/frame'
 
 export type {
-  BaseTransformFrameState,
-  RotateFrameState,
+  BaseDragOverlayState,
+  DragComputeResult,
+  DragOverlayState,
+  RotateOverlayState,
   RotateSpatialState,
   RotateTransformState,
-  ScaleFrameState,
+  ScaleOverlayState,
   ScaleSpatialState,
   ScaleTransformState,
-  TransformFrameState,
-  TranslateFrameState,
+  TranslateOverlayState,
   TranslateGuideWorld,
   TranslateSpatialState,
   TranslateTransformState,

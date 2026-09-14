@@ -60,16 +60,8 @@ export interface ScaleDetail extends BaseInteractionDetail {
       }
 }
 
-/** Controller 内部的可变算法记忆，同样不发布。 */
-export interface BaseControllerRuntime {
-  revision: number
-}
-
-export type TranslateRuntime = BaseControllerRuntime
-
-export interface RotateRuntime extends BaseControllerRuntime {
+/** RotateController 内部的可变算法记忆，不发布。 */
+export interface RotateRuntime {
   previousRawAngle: number
   completedTurns: number
 }
-
-export type ScaleRuntime = BaseControllerRuntime

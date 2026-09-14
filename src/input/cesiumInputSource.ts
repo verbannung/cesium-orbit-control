@@ -32,15 +32,6 @@ export class CesiumInputSource implements InputSource {
 
   bindEvents(handlers: PointerHandlers): () => void {
     const sse = new ScreenSpaceEventHandler(this.canvas)
-    const notifyEnvironmentChange = (): void => handlers.onEnvironmentChange?.()
-    const removeCameraChanged = this.camera.changed.addEventListener(notifyEnvironmentChange)
-    const view = this.canvas.ownerDocument?.defaultView
-    view?.addEventListener('resize', notifyEnvironmentChange)
-    const resizeObserver =
-      typeof ResizeObserver !== 'undefined'
-        ? new ResizeObserver(notifyEnvironmentChange)
-        : undefined
-    resizeObserver?.observe(this.canvas)
 
     sse.setInputAction(
       (e: ScreenSpaceEventHandler.PositionedEvent) => {
@@ -61,8 +52,9 @@ export class CesiumInputSource implements InputSource {
       ScreenSpaceEventType.LEFT_UP,
     )
 
-    let pointerId: number | null = null
-    const trackModifiers = (e: PointerEvent): void => {
+    let capturedPointerId: number | null = null
+    const trackPointer = (e: PointerEvent): void => {
+      this.activePointerId = e.pointerId
       this.modifiers = {
         shift: e.shiftKey,
         alt: e.altKey,
@@ -70,54 +62,43 @@ export class CesiumInputSource implements InputSource {
         meta: e.metaKey,
       }
     }
-    const onPointerMove = (e: PointerEvent): void => trackModifiers(e)
     const onPointerDown = (e: PointerEvent): void => {
-      trackModifiers(e)
-      if (e.button !== 0 || pointerId !== null) return
-      pointerId = e.pointerId
-      this.activePointerId = e.pointerId
+      if (e.button !== 0 || capturedPointerId !== null) return
+      trackPointer(e)
       try {
         this.canvas.setPointerCapture(e.pointerId)
+        capturedPointerId = e.pointerId
       } catch {
-        // 即使 capture 不可用，仍跟踪该输入序列，以便 pointerup/cancel 正确收尾。
+        // capture 不可用时仍允许 Cesium 处理当前事件。
       }
     }
     const onPointerUp = (e: PointerEvent): void => {
-      trackModifiers(e)
-      if (e.pointerId === pointerId) pointerId = null
+      trackPointer(e)
+      if (e.pointerId !== capturedPointerId) return
+      try {
+        this.canvas.releasePointerCapture(e.pointerId)
+      } catch {
+        // 指针已经释放，忽略。
+      }
+      capturedPointerId = null
     }
-    const cancelPointer = (e: PointerEvent): void => {
-      if (e.pointerId !== pointerId) return
-      // 先清状态：pointercancel 通常还会触发 lostpointercapture，取消只能通知一次。
-      pointerId = null
-      handlers.onCancel()
-    }
-    this.canvas.addEventListener('pointermove', onPointerMove)
+    this.canvas.addEventListener('pointermove', trackPointer)
     this.canvas.addEventListener('pointerdown', onPointerDown)
     this.canvas.addEventListener('pointerup', onPointerUp)
-    this.canvas.addEventListener('pointercancel', cancelPointer)
-    this.canvas.addEventListener('lostpointercapture', cancelPointer)
 
     return () => {
-      this.canvas.removeEventListener('pointermove', onPointerMove)
+      this.canvas.removeEventListener('pointermove', trackPointer)
       this.canvas.removeEventListener('pointerdown', onPointerDown)
       this.canvas.removeEventListener('pointerup', onPointerUp)
-      this.canvas.removeEventListener('pointercancel', cancelPointer)
-      this.canvas.removeEventListener('lostpointercapture', cancelPointer)
-      const capturedPointerId = pointerId
-      // 解绑不是输入取消；先清状态，release 引发的 lostpointercapture 不得回调。
-      pointerId = null
       if (capturedPointerId !== null) {
         try {
           this.canvas.releasePointerCapture(capturedPointerId)
         } catch {
-          // 指针已释放，忽略。
+          // 指针已经释放，忽略。
         }
+        capturedPointerId = null
       }
       if (!sse.isDestroyed()) sse.destroy()
-      removeCameraChanged?.()
-      view?.removeEventListener('resize', notifyEnvironmentChange)
-      resizeObserver?.disconnect()
     }
   }
 

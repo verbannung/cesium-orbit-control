@@ -1,8 +1,6 @@
 import type { Cartesian3, Matrix4, Quaternion } from '@cesium/engine'
 import type { ControlMode, HandleDescriptor } from './types'
 
-export type SessionId = string
-
 /**
  * 坐标/向量/四元数/矩阵一律直接使用 Cesium 类型（架构文档 6.1）。
  * Cesium 数学类型可变，不可变性由所有权规则保证：
@@ -52,7 +50,6 @@ export interface SessionStartSnapshot {
 }
 
 export interface SessionContext {
-  readonly id: SessionId
   readonly mode: ControlMode
   readonly handle: HandleDescriptor
   readonly start: SessionStartSnapshot

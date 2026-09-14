@@ -12,14 +12,14 @@ import type {
   ControlSnapshot,
   SessionStartSnapshot,
 } from '../core/snapshots'
-import type { TransformFrameState } from '../core/state'
+import type { DragComputeResult, DragOverlayState } from '../core/state'
 import type { ResolvedOptions } from '../core/options'
 import { GizmoFrame } from '../frame/gizmoFrame'
 import { composeTRS } from '../math/matrix'
 
 export interface RenderSystemSinks {
   onGeometryFrame(frame: GeometryFrameContext): void
-  onOverlayFrame(frame: OverlayFrameContext, state: TransformFrameState | null): void
+  onOverlayFrame(frame: OverlayFrameContext, overlay: DragOverlayState | null): void
   onModelMatrix(modelMatrix: Matrix4): void
 }
 
@@ -30,11 +30,10 @@ TODO 为undo redo 作为准备
 export class RenderSystem {
   private readonly gizmoFrame: GizmoFrame
   private committedControl: ControlSnapshot = identityControl()
-  private pendingState: TransformFrameState | null = null
+  /** 最新一次拖拽计算结果；在 preRender 中作为唯一分发来源。 */
+  private pendingResult: DragComputeResult | null = null
   private isBind = false //是否绑定了外部模型
 
-  private readonly lastEmitted = new Matrix4()
-  private hasEmitted = false
   private readonly modelMatrix = new Matrix4()
 
   constructor(
@@ -55,9 +54,6 @@ export class RenderSystem {
 
 
 
-  get hasPendingInteraction(): boolean {
-    return this.pendingState !== null
-  }
 
   /** 会话起始的不可变冻结快照。 */
   captureSessionStart(): SessionStartSnapshot {
@@ -69,43 +65,38 @@ export class RenderSystem {
   }
 
 
-  publishInteraction(state: TransformFrameState): void {
-    const current = this.pendingState
-    if (
-      current &&
-      current.sessionId === state.sessionId &&
-      state.revision < current.revision
-    ) {
-      return
-    }
-    this.pendingState = state
+  publishInteraction(result: DragComputeResult): void {
+    this.pendingResult = result
   }
 
   /** 把最新生效状态提交为已提交状态。 */
   commitInteraction(): void {
-    const state = this.pendingState
-    if (!state) return
-    this.committedControl = cloneControl(state.effectiveControl)
+    const result = this.pendingResult
+    if (!result) return
+    this.committedControl = cloneControl(result.effectiveControl)
   }
 
   /** 丢弃未提交状态（end 清理与 cancel 都走这里）。 */
   clearInteraction(): void {
-    if (!this.pendingState) return
-    this.pendingState = null
+    if (!this.pendingResult) return
+    this.pendingResult = null
   }
 
   render(): void {
-    const effectiveControl = this.pendingState?.effectiveControl ?? this.committedControl
-    const dragging = this.pendingState !== null
+    const effectiveControl = this.pendingResult?.effectiveControl ?? this.committedControl
+    const dragging = this.pendingResult !== null
 
     this.gizmoFrame.update(effectiveControl, dragging)
     this.frameCounter++
 
-    const state = this.pendingState
-    const resolvedControl = state?.effectiveControl ?? this.committedControl
+    const result = this.pendingResult
+    const resolvedControl = result?.effectiveControl ?? this.committedControl
 
     this.sinks.onGeometryFrame(this.createGeometryFrame(resolvedControl))
-    this.sinks.onOverlayFrame(this.createOverlayFrame(), state)
+
+          this.sinks.onOverlayFrame(this.createOverlayFrame(), result?.overlay ?? null)
+
+
 
     this.emitModelMatrix(resolvedControl)
   }
@@ -113,20 +104,12 @@ export class RenderSystem {
   createControllerFrame(): ControllerFrameContext {
     const gizmo = this.gizmoFrame
     const gizmoMatrix = Matrix4.clone(gizmo.gizmoMatrix, new Matrix4())
-    const inverse = Matrix4.inverse(gizmoMatrix, new Matrix4())
     return {
       environment: this.createEnvironment(),
       committedControl: cloneControl(this.committedControl),
       gizmoMatrix,
       viewMatrix: Matrix4.clone(gizmo.viewMatrix, new Matrix4()),
       axisFlipMatrix: Matrix4.clone(gizmo.axisFlipMatrix, new Matrix4()),
-        //TODO 工具函数其实不需要写入ControllerFrameContext
-      worldToLocalPoint: (point, result) =>
-        Matrix4.multiplyByPoint(inverse, point, result),
-      localToWorldPoint: (point, result) =>
-        Matrix4.multiplyByPoint(gizmoMatrix, point, result),
-      localToWorldVector: (vector, result) =>
-        Matrix4.multiplyByPointAsVector(gizmoMatrix, vector, result),
     }
   }
 
@@ -174,15 +157,13 @@ export class RenderSystem {
 
   private emitModelMatrix(control: ControlSnapshot): void {
     composeTRS(control.translation, control.rotation, control.scale, this.modelMatrix)
-    if (this.hasEmitted && Matrix4.equals(this.modelMatrix, this.lastEmitted)) return
-    Matrix4.clone(this.modelMatrix, this.lastEmitted)
-    this.hasEmitted = true
+
     this.sinks.onModelMatrix(this.modelMatrix)
   }
 
   destroy(): void {
     this.input.removePreRender()
-    this.pendingState = null
+    this.pendingResult = null
     this.isBind = false
   }
 }

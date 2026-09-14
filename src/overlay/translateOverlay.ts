@@ -1,7 +1,7 @@
 import type { Cartesian2 } from '@cesium/engine'
 import type { OverlayFrameContext } from '../core/frame'
 import type { WorldSegment } from '../core/snapshots'
-import type { TranslateFrameState } from '../core/state'
+import type { TranslateOverlayState } from '../core/state'
 import type { Overlay } from './overlay'
 import {
   drawArrowHead,
@@ -18,10 +18,10 @@ import {
 const DASH_PATTERN = [7, 5]
 
 /** 画一次位移拖拽的轴 / 面 / 视平面引导与读数。 */
-export class TranslateOverlay implements Overlay<TranslateFrameState> {
+export class TranslateOverlay implements Overlay<TranslateOverlayState> {
   constructor(private readonly context: CanvasRenderingContext2D) {}
 
-  render(frame: OverlayFrameContext, state: TranslateFrameState): void {
+  render(frame: OverlayFrameContext, state: TranslateOverlayState): void {
     const context = this.context
     const color = state.handle.color.toCssColorString()
 
