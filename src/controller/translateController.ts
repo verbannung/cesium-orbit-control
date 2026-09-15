@@ -73,6 +73,7 @@ export class TranslateController extends DragSession<TranslateDetail> {
 
     return {
       mode: 'translate',
+      startCenterPointWorld: seed.startCenterPointWorld,
       startPointWorld: seed.startPointWorld,
       planeOriginWorld: seed.planeOriginWorld,
       planeNormalWorld: seed.planeNormalWorld,
@@ -198,7 +199,11 @@ export class TranslateController extends DragSession<TranslateDetail> {
     if (detail.constraint.kind === 'axis') {
       return {
         kind: 'axis',
-        line: segmentThrough(center, detail.constraint.axisWorld, AXIS_GUIDE_LENGTH * scale),
+        line: segmentThrough(
+          detail.startCenterPointWorld,
+          detail.constraint.axisWorld,
+          AXIS_GUIDE_LENGTH * scale,
+        ),
       }
     }
 

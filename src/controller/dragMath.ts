@@ -47,6 +47,7 @@ export function createDragDetailSeed(
   if (!hit) return null
 
   return {
+    startCenterPointWorld: Cartesian3.clone(control.translation, new Cartesian3()),
     startPointWorld: Cartesian3.clone(hit, new Cartesian3()),
     planeOriginWorld,
     planeNormalWorld,
@@ -114,6 +115,7 @@ export function normalizeOrNull(v: Cartesian3): Cartesian3 | null {
   return Cartesian3.normalize(v, v)
 }
 
+//认为gizmoScale是不变的，只是收到屏幕像素坐标缩放影响 所以只取x即可
 export function gizmoScale(frame: ControllerFrameContext): number {
   const magnitude = Matrix4.getScale(frame.gizmoMatrix, scratchScale).x
   return magnitude > 1e-12 ? magnitude : 1

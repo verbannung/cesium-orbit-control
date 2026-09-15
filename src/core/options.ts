@@ -62,7 +62,7 @@ const DEFAULTS: Omit<ResolvedOptions, 'onChange'> = {
   scaleSnap: 0,
   minScale: 0.01,
   minScaleDenominator: 1e-6,
-  minRotateRadius: 0.15,
+  minRotateRadius: 0.10,
   axisLimit: 0.98,
   planeLimit: 0.2,
   showOverlay: true,

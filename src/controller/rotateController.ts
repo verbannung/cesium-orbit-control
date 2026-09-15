@@ -56,6 +56,7 @@ export class RotateController extends DragSession<RotateDetail> {
     const axisLocal = Cartesian3.clone(seed.planeNormalLocal, new Cartesian3())
 
     // 半径守卫：起始交点离轴心太近则拖拽不稳定。
+      // 浮点数 除数太小，微小误差被极度放大
     Cartesian3.subtract(seed.startPointWorld, seed.planeOriginWorld, scratchStart)
     const radiusWorld = Cartesian3.magnitude(scratchStart)
     if (radiusWorld < this.options.minRotateRadius) return null
@@ -71,6 +72,7 @@ export class RotateController extends DragSession<RotateDetail> {
 
     return {
       mode: 'rotate',
+      startCenterPointWorld: seed.startCenterPointWorld,
       startPointWorld: seed.startPointWorld,
       planeOriginWorld: seed.planeOriginWorld,
       planeNormalWorld: seed.planeNormalWorld,
@@ -120,7 +122,7 @@ export class RotateController extends DragSession<RotateDetail> {
     Cartesian3.subtract(detail.startPointWorld, detail.planeOriginWorld, scratchStart)
     Cartesian3.subtract(current, detail.planeOriginWorld, scratchQ)
 
-    // 半径守卫：当前交点过近则本帧不成立，不推进 unwrap 记忆。
+    //屏幕交点小于
     if (Cartesian3.magnitude(scratchQ) < this.options.minRotateRadius * detail.radiusWorld) {
       return null
     }

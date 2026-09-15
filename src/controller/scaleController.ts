@@ -14,8 +14,6 @@ import { createDragDetailSeed, gizmoScale, localDirectionToWorld } from './dragM
 import type { ScaleDetail } from './details'
 import { DragSession } from './dragSession'
 
-/** 各轴分量下标 */
-const COMPONENTS = ['x', 'y', 'z'] as const
 const AXIS_GUIDE_LENGTH = 6
 
 const scratchCurrent = new Cartesian3()
@@ -49,16 +47,17 @@ export class ScaleController extends DragSession<ScaleDetail> {
       const axisWorld = localDirectionToWorld(seed, axisLocal)
       if (!axisWorld) return null
 
-      // 解析出的自由轴均为坐标轴，|a_i| 中只有一个接近 1，argmax 精确。
-      const ax = Math.abs(axisLocal.x)
-      const ay = Math.abs(axisLocal.y)
-      const az = Math.abs(axisLocal.z)
-      const axisIndex: 0 | 1 | 2 = ax >= ay && ax >= az ? 0 : ay >= az ? 1 : 2
+      // 解析出的轴均为单位坐标轴，恰好一个分量的绝对值接近 1。
+      const isXAxis = Math.abs(axisLocal.x) > 0.5
+      const isYAxis = Math.abs(axisLocal.y) > 0.5
+      const isZAxis = Math.abs(axisLocal.z) > 0.5
 
       startOffsetLocal(seed, seed.startPointWorld, scratchStartLocal)
       resolved = {
         kind: 'axis',
-        axisIndex,
+        isXAxis,
+        isYAxis,
+        isZAxis,
         axisLocal,
         axisWorld,
         startComponent: Cartesian3.dot(scratchStartLocal, axisLocal),
@@ -73,6 +72,7 @@ export class ScaleController extends DragSession<ScaleDetail> {
 
     return {
       mode: 'scale',
+      startCenterPointWorld: seed.startCenterPointWorld,
       startPointWorld: seed.startPointWorld,
       planeOriginWorld: seed.planeOriginWorld,
       planeNormalWorld: seed.planeNormalWorld,
@@ -122,25 +122,25 @@ export class ScaleController extends DragSession<ScaleDetail> {
     const snappedRatio = snap(rawRatio, this.options.scaleSnap)
 
     const start = detail.startControl.scale
-    const resultingScale = Cartesian3.clone(start, new Cartesian3())
-    const appliedFactor = new Cartesian3(1, 1, 1)
     const uniform = detail.constraint.kind === 'uniform'
+    const axisConstraint = detail.constraint.kind === 'axis' ? detail.constraint : null
+    // 吸附后的比例先统一作用于三个分量，再逐轴执行 minScale。
+    const resultingScale = Cartesian3.multiplyByScalar(start, snappedRatio, new Cartesian3())
+    resultingScale.x = Math.max(this.options.minScale, resultingScale.x)
+    resultingScale.y = Math.max(this.options.minScale, resultingScale.y)
+    resultingScale.z = Math.max(this.options.minScale, resultingScale.z)
 
-    const applyComponent = (index: 0 | 1 | 2): void => {
-      const key = COMPONENTS[index]
-      // minScale 之后逐轴 clamp，appliedFactor 因此可能与 snappedRatio 不同。
-      const applied = Math.max(this.options.minScale, start[key] * snappedRatio)
-      resultingScale[key] = applied
-      appliedFactor[key] = Math.abs(start[key]) > 1e-12 ? applied / start[key] : 1
+    if (axisConstraint) {
+      if (!axisConstraint.isXAxis) resultingScale.x = start.x
+      if (!axisConstraint.isYAxis) resultingScale.y = start.y
+      if (!axisConstraint.isZAxis) resultingScale.z = start.z
     }
 
-    if (detail.constraint.kind === 'axis') {
-      applyComponent(detail.constraint.axisIndex)
-    } else {
-      applyComponent(0)
-      applyComponent(1)
-      applyComponent(2)
-    }
+    const appliedFactor = new Cartesian3(
+      Math.abs(start.x) > 1e-12 ? resultingScale.x / start.x : 1,
+      Math.abs(start.y) > 1e-12 ? resultingScale.y / start.y : 1,
+      Math.abs(start.z) > 1e-12 ? resultingScale.z / start.z : 1,
+    )
 
     return {
       transform: {
