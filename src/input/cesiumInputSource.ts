@@ -11,9 +11,21 @@ import {
   type Camera,
   type Scene,
 } from '@cesium/engine'
-import { NO_MODIFIERS, type PointerInput, type PointerModifiers } from '../core/pointer'
-import type { InputSource, PointerHandlers } from '../core/ports'
-import type { CameraSnapshot, ViewportSnapshot } from '../core/snapshots'
+import type {
+  CameraSnapshot,
+  InputSource,
+  PointerHandlers,
+  PointerInput,
+  PointerModifiers,
+  ViewportSnapshot,
+} from './types'
+
+const NO_MODIFIERS: PointerModifiers = {
+  shift: false,
+  alt: false,
+  ctrl: false,
+  meta: false,
+}
 
 /**
  * 职责: 把 DOM / Cesium 事件归一化为 PointerInput，并提供相机、视口与投影快照。

@@ -1,8 +1,7 @@
 import type { Cartesian2 } from '@cesium/engine'
-import type { OverlayFrameContext } from '../core/frame'
-import type { WorldSegment } from '../core/snapshots'
-import type { RotateOverlayState } from '../core/state'
-import type { Overlay } from './overlay'
+import type { OverlayInputSource } from '../input/types'
+import type { WorldSegment } from '../types'
+import type { Overlay, RotateOverlayState } from './types'
 import {
   distanceSquared,
   drawArrowHead,
@@ -22,7 +21,7 @@ const DEGENERATE_PX_SQUARED = 16
 export class RotateOverlay implements Overlay<RotateOverlayState> {
   constructor(private readonly context: CanvasRenderingContext2D) {}
 
-  render(frame: OverlayFrameContext, state: RotateOverlayState): void {
+  render(input: OverlayInputSource, state: RotateOverlayState): void {
     const context = this.context
     const color = state.handle.color.toCssColorString()
     const spatial = state.spatial
@@ -33,7 +32,7 @@ export class RotateOverlay implements Overlay<RotateOverlayState> {
     context.strokeStyle = color
     context.fillStyle = color
 
-    const ring = projectPolyline(frame, spatial.ringWorld)
+    const ring = projectPolyline(input, spatial.ringWorld)
     if (ring) {
       context.setLineDash([])
       context.globalAlpha = 0.75
@@ -41,7 +40,7 @@ export class RotateOverlay implements Overlay<RotateOverlayState> {
       strokePolyline(context, ring)
     }
 
-    const sector = projectPolygon(frame, spatial.sectorWorld)
+    const sector = projectPolygon(input, spatial.sectorWorld)
     if (sector) {
       context.setLineDash([])
       context.globalAlpha = 0.2
@@ -53,14 +52,14 @@ export class RotateOverlay implements Overlay<RotateOverlayState> {
     }
 
     if (spatial.axisGuideWorld) {
-      this.drawAxisGuide(frame, spatial.axisGuideWorld)
+      this.drawAxisGuide(input, spatial.axisGuideWorld)
     }
     if (spatial.normalGuideWorld) {
-      this.drawNormalGuide(frame, spatial.normalGuideWorld)
+      this.drawNormalGuide(input, spatial.normalGuideWorld)
     }
 
     // displayAngle 已由 Controller 决定，这里只做单位换算。
-    const anchor = projectPoint(frame, spatial.labelAnchorWorld)
+    const anchor = projectPoint(input, spatial.labelAnchorWorld)
     if (anchor) {
       const degrees = (state.transform.displayAngle * 180) / Math.PI
       const displayed = Math.abs(degrees) < 0.05 ? 0 : degrees
@@ -71,8 +70,8 @@ export class RotateOverlay implements Overlay<RotateOverlayState> {
     context.restore()
   }
 
-  private drawAxisGuide(frame: OverlayFrameContext, guide: WorldSegment): void {
-    const projected = projectSegment(frame, guide)
+  private drawAxisGuide(input: OverlayInputSource, guide: WorldSegment): void {
+    const projected = projectSegment(input, guide)
     if (!projected) return
 
     const context = this.context
@@ -84,15 +83,15 @@ export class RotateOverlay implements Overlay<RotateOverlayState> {
       return
     }
 
-    const extended = extendLineToViewport(projected[0], projected[1], frame.viewport)
+    const extended = extendLineToViewport(projected[0], projected[1], input.getViewport())
     const [start, end]: readonly [Cartesian2, Cartesian2] = extended ?? projected
     context.setLineDash([8, 5])
     strokeSegment(context, start, end)
     context.setLineDash([])
   }
 
-  private drawNormalGuide(frame: OverlayFrameContext, guide: WorldSegment): void {
-    const projected = projectSegment(frame, guide)
+  private drawNormalGuide(input: OverlayInputSource, guide: WorldSegment): void {
+    const projected = projectSegment(input, guide)
     if (!projected) return
     const [origin, end] = projected
 
@@ -118,13 +117,5 @@ export class RotateOverlay implements Overlay<RotateOverlayState> {
     context.arc(center.x, center.y, 5, 0, Math.PI * 2)
     context.stroke()
     context.fillText('N', center.x + 8, center.y - 8)
-  }
-
-  clear(): void {
-    // 画布由 OverlayManager 统一清除。
-  }
-
-  destroy(): void {
-    this.clear()
   }
 }

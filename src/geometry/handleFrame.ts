@@ -1,6 +1,6 @@
 import { Cartesian3, Matrix3, Matrix4 } from '@cesium/engine'
-import type { GeometryFrameContext } from '../core/frame'
-import type { Handle } from './types'
+import type { GeometryFrameContext } from '../render/types'
+import type { Handle } from './handle'
 
 /**
  * 绘制与拾取共用同一条矩阵选择规则，避免两边各写一份 if 而漂移。

@@ -1,5 +1,5 @@
 import { type Scene } from '@cesium/engine'
-import { Handle } from './types'
+import { Handle } from './handle'
 
 export abstract class BaseGeometry {
   protected assets: Handle[] = []

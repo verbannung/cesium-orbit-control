@@ -1,11 +1,11 @@
 import { Cartesian3, Matrix4, Quaternion, type Scene } from '@cesium/engine'
-import type { ResolvedOptions } from './core/options'
-import type { InputSource } from './core/ports'
-import type { ControlSnapshot } from './core/snapshots'
-import type { ControlMode } from './core/types'
+import type { ResolvedOptions } from './types'
+import type { InputSource } from './input/types'
+import type { ControlSnapshot } from './controller/types'
+import type { ControlMode } from './types'
 import { EventManager } from './event/eventManager'
 import { GeometryManager } from './geometry/geometryManager'
-import { decompose, DECOMPOSE_ERROR } from './math/matrix'
+import { decompose, DECOMPOSE_ERROR } from './util/matrix'
 import { OverlayManager } from './overlay/overlayManager'
 import { RenderSystem } from './render/renderSystem'
 
@@ -19,6 +19,7 @@ export class CenterController {
   private readonly overlayManager: OverlayManager
   private readonly eventManager: EventManager
   private target: Matrix4 | null = null
+  private modeInitialized = false
 
   mode: ControlMode = 'translate'
 
@@ -31,7 +32,7 @@ export class CenterController {
     this.overlayManager = new OverlayManager(input, options)
     this.renderSystem = new RenderSystem(input, options, {
       onGeometryFrame: (frame) => this.geometryManager.onFrame(frame),
-      onOverlayFrame: (frame, state) => this.overlayManager.onFrame(frame, state),
+      onOverlayFrame: (state) => this.overlayManager.onFrame(state),
       onModelMatrix: (matrix) => this.emitModelMatrix(matrix),
     })
     this.eventManager = new EventManager(
@@ -39,6 +40,7 @@ export class CenterController {
       this.renderSystem,
       this.geometryManager,
       options,
+      this,
     )
     this.eventManager.init()
   }
@@ -54,15 +56,19 @@ export class CenterController {
       rotation: Quaternion.fromRotationMatrix(decomposed.R, new Quaternion()),
       scale: Cartesian3.clone(decomposed.S, new Cartesian3()),
     }
+    this.eventManager.cancelBeforeModeChange()
     this.renderSystem.bind(control)
     this.setMode(mode)
   }
 
   setMode(mode: ControlMode): void {
+    if (this.modeInitialized && mode === this.mode) return
+
+    this.eventManager.cancelBeforeModeChange()
     this.mode = mode
     this.geometryManager.setMode(mode)
-    this.overlayManager.setMode(mode)
-    this.eventManager.setMode(mode)
+    this.overlayManager.clearForModeChange()
+    this.modeInitialized = true
   }
 
   private emitModelMatrix(modelMatrix: Matrix4): void {

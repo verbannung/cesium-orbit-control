@@ -1,27 +1,20 @@
-import { Cartesian2, Cartesian3, Matrix4 } from '@cesium/engine'
-import { cloneControl, identityControl } from '../core/controlSnapshot'
+import { Matrix4 } from '@cesium/engine'
+import { cloneControl, identityControl } from '../controller/controlSnapshot'
 import type {
   ControllerFrameContext,
   FrameEnvironment,
   GeometryFrameContext,
-  OverlayFrameContext,
-} from '../core/frame'
-import type { InputSource } from '../core/ports'
+  RenderSystemSinks,
+} from './types'
+import type { CameraSnapshot, InputSource } from '../input/types'
 import type {
-  CameraSnapshot,
   ControlSnapshot,
+  DragComputeResult,
   SessionStartSnapshot,
-} from '../core/snapshots'
-import type { DragComputeResult, DragOverlayState } from '../core/state'
-import type { ResolvedOptions } from '../core/options'
-import { GizmoFrame } from '../frame/gizmoFrame'
-import { composeTRS } from '../math/matrix'
-
-export interface RenderSystemSinks {
-  onGeometryFrame(frame: GeometryFrameContext): void
-  onOverlayFrame(frame: OverlayFrameContext, overlay: DragOverlayState | null): void
-  onModelMatrix(modelMatrix: Matrix4): void
-}
+} from '../controller/types'
+import type { ResolvedOptions } from '../types'
+import { GizmoFrame } from './gizmoFrame'
+import { composeTRS } from '../util/matrix'
 
 /*
 提交与拖动当前值的缓冲带、
@@ -90,15 +83,10 @@ export class RenderSystem {
     this.frameCounter++
 
     const result = this.pendingResult
-    const resolvedControl = result?.effectiveControl ?? this.committedControl
 
-    this.sinks.onGeometryFrame(this.createGeometryFrame(resolvedControl))
-
-          this.sinks.onOverlayFrame(this.createOverlayFrame(), result?.overlay ?? null)
-
-
-
-    this.emitModelMatrix(resolvedControl)
+    this.sinks.onGeometryFrame(this.createGeometryFrame(effectiveControl))
+    this.sinks.onOverlayFrame(result?.overlay ?? null)
+    this.emitModelMatrix(effectiveControl)
   }
 
   createControllerFrame(): ControllerFrameContext {
@@ -106,7 +94,6 @@ export class RenderSystem {
     const gizmoMatrix = Matrix4.clone(gizmo.gizmoMatrix, new Matrix4())
     return {
       environment: this.createEnvironment(),
-      committedControl: cloneControl(this.committedControl),
       gizmoMatrix,
       viewMatrix: Matrix4.clone(gizmo.viewMatrix, new Matrix4()),
       axisFlipMatrix: Matrix4.clone(gizmo.axisFlipMatrix, new Matrix4()),
@@ -121,16 +108,6 @@ export class RenderSystem {
       gizmoMatrix: gizmo.gizmoMatrix,
       viewMatrix: gizmo.viewMatrix,
       axisFlipMatrix: gizmo.axisFlipMatrix,
-    }
-  }
-
-  private createOverlayFrame(): OverlayFrameContext {
-    const viewport = this.input.getViewport()
-    return {
-      viewport,
-      pixelRatio: viewport.pixelRatio,
-      worldToScreen: (point: Cartesian3, result?: Cartesian2) =>
-        this.input.worldToWindow(point, result),
     }
   }
 

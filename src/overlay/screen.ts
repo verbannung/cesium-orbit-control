@@ -1,11 +1,6 @@
 import { Cartesian2, type Cartesian3 } from '@cesium/engine'
-import type { OverlayFrameContext } from '../core/frame'
-import type {
-  ViewportSnapshot,
-  WorldPolygon,
-  WorldPolyline,
-  WorldSegment,
-} from '../core/snapshots'
+import type { OverlayInputSource, ViewportSnapshot } from '../input/types'
+import type { WorldPolygon, WorldPolyline, WorldSegment } from '../types'
 
 /**
  * Overlay 共用的屏幕空间工具：投影、二维裁剪与 Canvas 绘制。
@@ -13,20 +8,20 @@ import type {
  */
 
 export function projectPoint(
-  frame: OverlayFrameContext,
+  input: OverlayInputSource,
   point: Cartesian3,
 ): Cartesian2 | null {
-  return frame.worldToScreen(point, new Cartesian2())
+  return input.worldToWindow(point, new Cartesian2())
 }
 
 /** 任一点投影失败即整体放弃，避免画出穿过相机的错误折线。 */
 export function projectPoints(
-  frame: OverlayFrameContext,
+  input: OverlayInputSource,
   points: readonly Cartesian3[],
 ): Cartesian2[] | null {
   const screen: Cartesian2[] = []
   for (const point of points) {
-    const projected = projectPoint(frame, point)
+    const projected = projectPoint(input, point)
     if (!projected) return null
     screen.push(projected)
   }
@@ -34,29 +29,29 @@ export function projectPoints(
 }
 
 export function projectPolyline(
-  frame: OverlayFrameContext,
+  input: OverlayInputSource,
   polyline: WorldPolyline,
 ): Cartesian2[] | null {
-  const points = projectPoints(frame, polyline.points)
+  const points = projectPoints(input, polyline.points)
   if (!points || points.length < 2) return null
   if (polyline.closed) points.push(points[0])
   return points
 }
 
 export function projectPolygon(
-  frame: OverlayFrameContext,
+  input: OverlayInputSource,
   polygon: WorldPolygon,
 ): Cartesian2[] | null {
-  const points = projectPoints(frame, polygon.points)
+  const points = projectPoints(input, polygon.points)
   return points && points.length >= 3 ? points : null
 }
 
 export function projectSegment(
-  frame: OverlayFrameContext,
+  input: OverlayInputSource,
   segment: WorldSegment,
 ): readonly [Cartesian2, Cartesian2] | null {
-  const start = projectPoint(frame, segment.start)
-  const end = projectPoint(frame, segment.end)
+  const start = projectPoint(input, segment.start)
+  const end = projectPoint(input, segment.end)
   return start && end ? [start, end] : null
 }
 

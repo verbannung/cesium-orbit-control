@@ -1,13 +1,13 @@
 import { Cartesian3, Color } from '@cesium/engine'
 import { BaseGeometry } from './baseGeometry'
+import { VIEW_AXIS_RADIUS } from '../constants'
 import {
   buildBoxAxis,
   buildBoxAxisMeshes,
   buildViewRing,
   buildViewRingMeshes,
-  VIEW_AXIS_RADIUS,
 } from './geometryUtil'
-import { Handle } from './types'
+import { Handle } from './handle'
 
 export class ScaleGeometry extends BaseGeometry {
   build(): void {

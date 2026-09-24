@@ -1,5 +1,5 @@
 import { Cartesian3, Quaternion } from '@cesium/engine'
-import type { ControlSnapshot } from './snapshots'
+import type { ControlSnapshot } from './types'
 
 /** 发布边界上的深拷贝：Cesium 数学类型可变，跨模块传递必须拷贝。 */
 export function cloneControl(control: ControlSnapshot): ControlSnapshot {

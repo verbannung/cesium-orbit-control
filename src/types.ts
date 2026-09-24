@@ -1,4 +1,16 @@
-import type { Matrix4 } from '@cesium/engine'
+import type { Cartesian3, Matrix4 } from '@cesium/engine'
+
+/**
+ * 包根类型：公开 API 语义与跨模块共享的世界坐标图元。
+ * 本文件只允许出现类型，不得导出任何运行时值。
+ * 默认值与 resolveOptions 等运行时实现见 src/options.ts。
+ */
+
+export type Triple<T> = [T, T, T]
+
+export type ControlMode = 'translate' | 'rotate' | 'scale'
+
+/* ----------------------------- 公开 options ------------------------------ */
 
 export interface OrbitControlOptions {
   gizmoPixelSize?: number
@@ -54,33 +66,21 @@ export interface ResolvedOptions {
   readonly onChange?: (modelMatrix: Matrix4) => void
 }
 
-const DEFAULTS: Omit<ResolvedOptions, 'onChange'> = {
-  gizmoPixelSize: 80,
-  pickPaddingPx: 8,
-  degenerateThreshold: 0.15,
-  translateSnap: 0,
-  scaleSnap: 0,
-  minScale: 0.01,
-  minScaleDenominator: 1e-6,
-  minRotateRadius: 0.10,
-  axisLimit: 0.98,
-  planeLimit: 0.2,
-  showOverlay: true,
+/**
+ * 坐标/向量/四元数/矩阵一律直接使用 Cesium 类型（架构文档 6.1）。
+ * Cesium 数学类型可变，不可变性由所有权规则保证：
+ * Controller 发布前必须 clone，已发布对象只读，不得再作为 result 参数。
+ */
+export interface WorldSegment {
+  readonly start: Cartesian3
+  readonly end: Cartesian3
 }
 
-export function resolveOptions(options: OrbitControlOptions = {}): ResolvedOptions {
-  return {
-    gizmoPixelSize: options.gizmoPixelSize ?? DEFAULTS.gizmoPixelSize,
-    pickPaddingPx: options.pickPaddingPx ?? DEFAULTS.pickPaddingPx,
-    degenerateThreshold: options.degenerateThreshold ?? DEFAULTS.degenerateThreshold,
-    translateSnap: options.translateSnap ?? DEFAULTS.translateSnap,
-    scaleSnap: options.scaleSnap ?? DEFAULTS.scaleSnap,
-    minScale: options.minScale ?? DEFAULTS.minScale,
-    minScaleDenominator: options.minScaleDenominator ?? DEFAULTS.minScaleDenominator,
-    minRotateRadius: options.minRotateRadius ?? DEFAULTS.minRotateRadius,
-    axisLimit: options.axisLimit ?? DEFAULTS.axisLimit,
-    planeLimit: options.planeLimit ?? DEFAULTS.planeLimit,
-    showOverlay: options.showOverlay ?? DEFAULTS.showOverlay,
-    onChange: options.onChange,
-  }
+export interface WorldPolyline {
+  readonly points: readonly Cartesian3[]
+  readonly closed: boolean
+}
+
+export interface WorldPolygon {
+  readonly points: readonly Cartesian3[]
 }

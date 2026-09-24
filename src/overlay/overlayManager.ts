@@ -1,9 +1,6 @@
-import type { OverlayFrameContext } from '../core/frame'
-import type { ResolvedOptions } from '../core/options'
-import type { InputSource } from '../core/ports'
-import type { DragOverlayState } from '../core/state'
-import type { ControlMode } from '../core/types'
-import type { Overlay } from './overlay'
+import type { ResolvedOptions } from '../types'
+import type { OverlayInputSource } from '../input/types'
+import type { DragOverlayState } from './types'
 import { RotateOverlay } from './rotateOverlay'
 import { ScaleOverlay } from './scaleOverlay'
 import { TranslateOverlay } from './translateOverlay'
@@ -23,14 +20,13 @@ export class OverlayManager {
   private readonly rotate: RotateOverlay
   private readonly scale: ScaleOverlay
 
-  private mode: ControlMode = 'translate'
   private pixelRatio = 1
   private disposed = false
   private positionedHost: HTMLElement | null = null
   private originalHostPosition: string | null = null
 
   constructor(
-    input: InputSource,
+    private readonly input: OverlayInputSource,
     private readonly options: ResolvedOptions,
   ) {
     this.sourceCanvas = input.getCanvas()
@@ -58,35 +54,33 @@ export class OverlayManager {
     this.clear()
   }
 
-  setMode(mode: ControlMode): void {
-    this.mode = mode
+  clearForModeChange(): void {
     this.clear()
-  }
-
-  get currentMode(): ControlMode {
-    return this.mode
   }
 
   /** 每帧一次：先清空，再按发布状态重绘。state 为 null 表示没有活动交互。 */
-  onFrame(frame: OverlayFrameContext, state: DragOverlayState | null): void {
+  onFrame(state: DragOverlayState | null): void {
     if (this.disposed) return
 
     this.mountCanvas()
-    this.syncCanvasSize(frame)
+    this.syncCanvasSize()
     this.clear()
 
     if (!this.options.showOverlay || !state) return
-    this.overlayFor(state).render(frame)
+    this.renderOverlay(state)
   }
 
-  private overlayFor(state: DragOverlayState): OverlayRenderer {
+  private renderOverlay(state: DragOverlayState): void {
     switch (state.mode) {
       case 'translate':
-        return { render: (frame) => this.translate.render(frame, state) }
+        this.translate.render(this.input, state)
+        break
       case 'rotate':
-        return { render: (frame) => this.rotate.render(frame, state) }
+        this.rotate.render(this.input, state)
+        break
       case 'scale':
-        return { render: (frame) => this.scale.render(frame, state) }
+        this.scale.render(this.input, state)
+        break
     }
   }
 
@@ -101,7 +95,6 @@ export class OverlayManager {
     if (this.disposed) return
 
     this.clear()
-    for (const overlay of this.allOverlays()) overlay.destroy()
     this.disposed = true
 
     const parent = this.overlayCanvas.parentElement
@@ -111,10 +104,6 @@ export class OverlayManager {
     }
     this.positionedHost = null
     this.originalHostPosition = null
-  }
-
-  private allOverlays(): readonly Overlay[] {
-    return [this.translate, this.rotate, this.scale]
   }
 
   private mountCanvas(): void {
@@ -128,9 +117,9 @@ export class OverlayManager {
     if (this.overlayCanvas.parentElement !== host) host.appendChild(this.overlayCanvas)
   }
 
-  private syncCanvasSize(frame: OverlayFrameContext): void {
-    const { widthCss, heightCss } = frame.viewport
-    const pixelRatio = frame.pixelRatio > 0 ? frame.pixelRatio : 1
+  private syncCanvasSize(): void {
+    const { widthCss, heightCss, pixelRatio: requestedPixelRatio } = this.input.getViewport()
+    const pixelRatio = requestedPixelRatio > 0 ? requestedPixelRatio : 1
     const backingWidth = Math.round(widthCss * pixelRatio)
     const backingHeight = Math.round(heightCss * pixelRatio)
 
@@ -144,8 +133,4 @@ export class OverlayManager {
     this.pixelRatio = pixelRatio
     this.context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
   }
-}
-
-interface OverlayRenderer {
-  render(frame: OverlayFrameContext): void
 }

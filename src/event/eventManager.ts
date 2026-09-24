@@ -1,12 +1,11 @@
-import type { ResolvedOptions } from '../core/options'
-import type { PointerInput } from '../core/pointer'
-import type { InputSource } from '../core/ports'
-import type { SessionContext } from '../core/snapshots'
-import type { ControlMode } from '../core/types'
+import type { ResolvedOptions } from '../types'
+import type { InputSource, PointerInput } from '../input/types'
+import type { ControllerInputParam } from '../controller/types'
+import type { ControlMode } from '../types'
 import { RotateController } from '../controller/rotateController'
 import { ScaleController } from '../controller/scaleController'
 import { TranslateController } from '../controller/translateController'
-import type { DragSessionPort } from '../controller/dragSession'
+import type { DragSessionPort } from '../controller/types'
 import type { GeometryManager } from '../geometry/geometryManager'
 import type { RenderSystem } from '../render/renderSystem'
 
@@ -20,13 +19,12 @@ export class EventManager {
   private active: DragSessionPort | null = null
   private cameraEnabledBackup = true
   private unbind: (() => void) | null = null
-  private mode: ControlMode = 'translate'
-
   constructor(
     private readonly input: InputSource,
     private readonly render: RenderSystem,
     private readonly geometry: GeometryManager,
     private readonly options: ResolvedOptions,
+    private readonly modeProvider: Readonly<{ readonly mode: ControlMode }>,
   ) {}
 
   init(): void {
@@ -37,24 +35,25 @@ export class EventManager {
     })
   }
 
-  setMode(mode: ControlMode): void {
+  cancelBeforeModeChange(): void {
     if (this.active) this.cancel()
-    this.mode = mode
   }
 
   private onPointerDown(input: PointerInput): void {
     if (this.active) return
+    const mode = this.modeProvider.mode
     const handle = this.geometry.pick(input.rayWorld)
     if (!handle) return
 
-    const session: SessionContext = {
-      mode: this.mode,
+    const param: ControllerInputParam = {
+      input,
       handle,
       start: this.render.captureSessionStart(),
+      frame: this.render.createControllerFrame(),
     }
 
-    const drag = createDragSession(this.mode, this.options)
-    const result = drag.begin(input, session, this.render.createControllerFrame())
+    const drag = createDragSession(mode, this.options)
+    const result = drag.begin(param)
     if (!result) return
 
     this.active = drag

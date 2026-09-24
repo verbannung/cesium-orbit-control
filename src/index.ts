@@ -1,7 +1,7 @@
 import type { Camera, Matrix4, Scene } from '@cesium/engine'
 import { CenterController } from './centerController'
-import { resolveOptions, type OrbitControlOptions } from './core/options'
-import type { ControlMode } from './core/types'
+import { resolveOptions } from './options'
+import type { ControlMode, OrbitControlOptions } from './types'
 import { CesiumInputSource } from './input/cesiumInputSource'
 
 export class OrbitControl {
@@ -36,40 +36,49 @@ export class OrbitControl {
 }
 
 export { CenterController } from './centerController'
-export type { OrbitControlOptions, ResolvedOptions } from './core/options'
-export type { InputSource, PointerHandlers } from './core/ports'
-export type { PointerInput, PointerModifiers } from './core/pointer'
+export type {
+  CameraSnapshot,
+  InputSource,
+  OverlayInputSource,
+  PointerHandlers,
+  PointerInput,
+  PointerModifiers,
+  ViewportSnapshot,
+} from './input/types'
 
 export type {
   ControlMode,
+  OrbitControlOptions,
+  ResolvedOptions,
+  WorldPolygon,
+  WorldPolyline,
+  WorldSegment,
+} from './types'
+
+export type {
   HandleDescriptor,
   HandleFrameKind,
   HandleId,
   ResolvedConstraint,
-} from './core/types'
+} from './geometry/types'
 
 export type {
-  CameraSnapshot,
   ControlSnapshot,
+  DragComputeResult,
   SessionContext,
   SessionStartSnapshot,
-  ViewportSnapshot,
-  WorldPolygon,
-  WorldPolyline,
-  WorldSegment,
-} from './core/snapshots'
+} from './controller/types'
 
 export type {
   ControllerFrameContext,
   FrameEnvironment,
   GeometryFrameContext,
-  OverlayFrameContext,
-} from './core/frame'
+} from './render/types'
 
 export type {
   BaseDragOverlayState,
-  DragComputeResult,
   DragOverlayState,
+  Overlay,
   RotateOverlayState,
   RotateSpatialState,
   RotateTransformState,
@@ -80,9 +89,7 @@ export type {
   TranslateGuideWorld,
   TranslateSpatialState,
   TranslateTransformState,
-} from './core/state'
-
-export type { Overlay } from './overlay/overlay'
+} from './overlay/types'
 
 /** @deprecated 使用 ControlMode。 */
 export type Mode = ControlMode

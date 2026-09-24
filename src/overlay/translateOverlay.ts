@@ -1,8 +1,7 @@
 import type { Cartesian2 } from '@cesium/engine'
-import type { OverlayFrameContext } from '../core/frame'
-import type { WorldSegment } from '../core/snapshots'
-import type { TranslateOverlayState } from '../core/state'
-import type { Overlay } from './overlay'
+import type { OverlayInputSource } from '../input/types'
+import type { WorldSegment } from '../types'
+import type { Overlay, TranslateOverlayState } from './types'
 import {
   drawArrowHead,
   drawLabel,
@@ -21,7 +20,7 @@ const DASH_PATTERN = [7, 5]
 export class TranslateOverlay implements Overlay<TranslateOverlayState> {
   constructor(private readonly context: CanvasRenderingContext2D) {}
 
-  render(frame: OverlayFrameContext, state: TranslateOverlayState): void {
+  render(input: OverlayInputSource, state: TranslateOverlayState): void {
     const context = this.context
     const color = state.handle.color.toCssColorString()
 
@@ -34,25 +33,25 @@ export class TranslateOverlay implements Overlay<TranslateOverlayState> {
 
     const guide = state.spatial.guide
     if (guide.kind === 'axis') {
-      this.drawAxisGuide(frame, guide.line)
+      this.drawAxisGuide(input, guide.line)
     } else if (guide.kind === 'plane') {
-      const polygon = projectPolygon(frame, guide.polygon)
+      const polygon = projectPolygon(input, guide.polygon)
       if (polygon) {
         context.setLineDash([])
         strokePolyline(context, [...polygon, polygon[0]])
       }
     } else {
-      const ring = projectPolyline(frame, guide.ring)
+      const ring = projectPolyline(input, guide.ring)
       if (ring) {
         context.setLineDash([])
         strokePolyline(context, ring)
       }
-      this.drawDashedArrow(frame, guide.movementArrow)
+      this.drawDashedArrow(input, guide.movementArrow)
     }
 
     // 直接显示 Controller 发布的结果位移，不由起终点反推。
     const t = state.transform.resultingTranslation
-    const anchor = projectPoint(frame, state.spatial.labelAnchorWorld)
+    const anchor = projectPoint(input, state.spatial.labelAnchorWorld)
     if (anchor) {
       drawLabel(
         context,
@@ -67,22 +66,22 @@ export class TranslateOverlay implements Overlay<TranslateOverlayState> {
 
   /** 轴引导是一条直线，延长到视口边界，避免短线段随距离忽长忽短。 */
   private drawAxisGuide(
-    frame: OverlayFrameContext,
+    input: OverlayInputSource,
     line: WorldSegment,
   ): void {
-    const projected = projectSegment(frame, line)
+    const projected = projectSegment(input, line)
     if (!projected) return
-    const extended = extendLineToViewport(projected[0], projected[1], frame.viewport)
+    const extended = extendLineToViewport(projected[0], projected[1], input.getViewport())
     const [start, end]: readonly [Cartesian2, Cartesian2] = extended ?? projected
     this.context.setLineDash([])
     strokeSegment(this.context, start, end)
   }
 
   private drawDashedArrow(
-    frame: OverlayFrameContext,
+    input: OverlayInputSource,
     segment: WorldSegment,
   ): void {
-    const projected = projectSegment(frame, segment)
+    const projected = projectSegment(input, segment)
     if (!projected) return
     const [start, end] = projected
     const context = this.context
@@ -90,13 +89,5 @@ export class TranslateOverlay implements Overlay<TranslateOverlayState> {
     strokeSegment(context, start, end)
     context.setLineDash([])
     drawArrowHead(context, start, end, 11)
-  }
-
-  clear(): void {
-    // 画布由 OverlayManager 统一清除，这里没有额外的驻留状态。
-  }
-
-  destroy(): void {
-    this.clear()
   }
 }

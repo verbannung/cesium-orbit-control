@@ -1,23 +1,34 @@
 import type { Cartesian3, Quaternion } from '@cesium/engine'
-import type {
-  ControlSnapshot,
-  WorldPolygon,
-  WorldPolyline,
-  WorldSegment,
-} from './snapshots'
-import type { HandleDescriptor } from './types'
+import type { HandleDescriptor } from '../geometry/types'
+import type { OverlayInputSource } from '../input/types'
+import type { WorldPolygon, WorldPolyline, WorldSegment } from '../types'
 
-/** Controller 已完成语义计算、专供 Overlay 绘制的当前拖拽数据。 */
+/**
+ * Overlay 模块协议：屏幕空间渲染器接口与 Controller 已解析的绘制状态。
+ * 本文件只允许出现类型，不得导出任何运行时值。
+ */
+
+/**
+ * 屏幕空间渲染器。只消费 Controller 已解析的世界图元与受限投影能力。
+ *
+ * Overlay 不得：读取局部基重新推导轴或平面、求 Gizmo 矩阵的逆、
+ * 做局部/世界转换、重新生成旋转圆弧、按起终点反推角度/位移/缩放比例。
+ */
+export interface Overlay<TState extends DragOverlayState = DragOverlayState> {
+  render(input: OverlayInputSource, state: TState): void
+}
+
+/**
+ * @deprecated 兼容保留的历史公开名，不参与任何在用状态的继承链。
+ * Overlay 绘制状态现由 Translate/Rotate/Scale 各自完整声明。
+ */
 export interface BaseDragOverlayState {
   readonly handle: HandleDescriptor
 }
 
-/** 一次拖拽计算唯一跨越 Controller/RenderSystem 边界的结果。 */
-export interface DragComputeResult {
-  /** Geometry、宿主模型与下一帧控制计算使用的实际 TRS。 */
-  readonly effectiveControl: ControlSnapshot
-  /** Overlay 需要的已解析世界空间图元与显示语义。 */
-  readonly overlay: DragOverlayState
+/** 当前在用的共享绘制字段，D-006 会逐项收敛为各状态自有的最终绘制数据。 */
+interface ActiveDragOverlayStateBase {
+  readonly handle: HandleDescriptor
 }
 
 /* ------------------------------- translate ------------------------------- */
@@ -54,7 +65,7 @@ export interface TranslateSpatialState {
   readonly labelAnchorWorld: Cartesian3
 }
 
-export interface TranslateOverlayState extends BaseDragOverlayState {
+export interface TranslateOverlayState extends ActiveDragOverlayStateBase {
   readonly mode: 'translate'
   readonly transform: TranslateTransformState
   readonly spatial: TranslateSpatialState
@@ -87,7 +98,7 @@ export interface RotateSpatialState {
   readonly labelAnchorWorld: Cartesian3
 }
 
-export interface RotateOverlayState extends BaseDragOverlayState {
+export interface RotateOverlayState extends ActiveDragOverlayStateBase {
   readonly mode: 'rotate'
   readonly transform: RotateTransformState
   readonly spatial: RotateSpatialState
@@ -117,7 +128,7 @@ export interface ScaleSpatialState {
   readonly labelAnchorWorld: Cartesian3
 }
 
-export interface ScaleOverlayState extends BaseDragOverlayState {
+export interface ScaleOverlayState extends ActiveDragOverlayStateBase {
   readonly mode: 'scale'
   readonly transform: ScaleTransformState
   readonly spatial: ScaleSpatialState

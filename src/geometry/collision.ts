@@ -1,9 +1,10 @@
 import { Cartesian3, IntersectionTests, Matrix4, Ray } from '@cesium/engine'
-import type { GeometryFrameContext } from '../core/frame'
-import type { HandleId } from '../core/types'
-import { hitsBoundingSphere } from '../math/ray'
+import type { GeometryFrameContext } from '../render/types'
+import type { HandleId } from './types'
+import { hitsBoundingSphere } from '../util/ray'
 import { matrixForHandle, toCameraLocal } from './handleFrame'
-import type { Handle, MeshData } from './types'
+import type { MeshData } from './types'
+import type { Handle } from './handle'
 
 /** 拾取优先级： view = uniform > axis > plane */
 const PICK_PRIORITY: Record<HandleId, number> = {

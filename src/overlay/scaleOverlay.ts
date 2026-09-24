@@ -1,8 +1,7 @@
 import { Cartesian3, type Cartesian2 } from '@cesium/engine'
-import type { OverlayFrameContext } from '../core/frame'
-import type { WorldSegment } from '../core/snapshots'
-import type { ScaleOverlayState } from '../core/state'
-import type { Overlay } from './overlay'
+import type { OverlayInputSource } from '../input/types'
+import type { WorldSegment } from '../types'
+import type { Overlay, ScaleOverlayState } from './types'
 import {
   drawArrowHead,
   drawLabel,
@@ -18,7 +17,7 @@ const DASH_PATTERN = [7, 5]
 export class ScaleOverlay implements Overlay<ScaleOverlayState> {
   constructor(private readonly context: CanvasRenderingContext2D) {}
 
-  render(frame: OverlayFrameContext, state: ScaleOverlayState): void {
+  render(input: OverlayInputSource, state: ScaleOverlayState): void {
     const context = this.context
     const color = state.handle.color.toCssColorString()
     const spatial = state.spatial
@@ -29,11 +28,11 @@ export class ScaleOverlay implements Overlay<ScaleOverlayState> {
     context.lineWidth = 2
     context.lineCap = 'round'
 
-    if (spatial.axisGuideWorld) this.drawAxisGuide(frame, spatial.axisGuideWorld)
-    if (spatial.movementArrowWorld) this.drawArrow(frame, spatial.movementArrowWorld)
+    if (spatial.axisGuideWorld) this.drawAxisGuide(input, spatial.axisGuideWorld)
+    if (spatial.movementArrowWorld) this.drawArrow(input, spatial.movementArrowWorld)
 
     // 显示 Controller 实际施加的比例，不用 current/start 反推（会丢掉 snap 与 clamp）。
-    const anchor = projectPoint(frame, spatial.labelAnchorWorld)
+    const anchor = projectPoint(input, spatial.labelAnchorWorld)
     if (anchor) {
       drawLabel(context, anchor, `Scale ${displayFactor(state).toFixed(3)}×`)
     }
@@ -42,17 +41,17 @@ export class ScaleOverlay implements Overlay<ScaleOverlayState> {
     context.restore()
   }
 
-  private drawAxisGuide(frame: OverlayFrameContext, guide: WorldSegment): void {
-    const projected = projectSegment(frame, guide)
+  private drawAxisGuide(input: OverlayInputSource, guide: WorldSegment): void {
+    const projected = projectSegment(input, guide)
     if (!projected) return
-    const extended = extendLineToViewport(projected[0], projected[1], frame.viewport)
+    const extended = extendLineToViewport(projected[0], projected[1], input.getViewport())
     const [start, end]: readonly [Cartesian2, Cartesian2] = extended ?? projected
     this.context.setLineDash([])
     strokeSegment(this.context, start, end)
   }
 
-  private drawArrow(frame: OverlayFrameContext, segment: WorldSegment): void {
-    const projected = projectSegment(frame, segment)
+  private drawArrow(input: OverlayInputSource, segment: WorldSegment): void {
+    const projected = projectSegment(input, segment)
     if (!projected) return
     const [start, end] = projected
     const context = this.context
@@ -60,14 +59,6 @@ export class ScaleOverlay implements Overlay<ScaleOverlayState> {
     strokeSegment(context, start, end)
     context.setLineDash([])
     drawArrowHead(context, start, end, 10)
-  }
-
-  clear(): void {
-    // 画布由 OverlayManager 统一清除。
-  }
-
-  destroy(): void {
-    this.clear()
   }
 }
 

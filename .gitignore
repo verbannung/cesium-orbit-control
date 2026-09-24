@@ -13,6 +13,7 @@
 !src/
 !example/
 !tests/
+!tsconfig.json
 
 
 node_modules/

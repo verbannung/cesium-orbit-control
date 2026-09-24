@@ -1,34 +1,26 @@
 import { Cartesian3, Matrix3, Matrix4 } from '@cesium/engine'
-import type { ControllerFrameContext } from '../core/frame'
-import type { ResolvedOptions } from '../core/options'
-import type { PointerInput } from '../core/pointer'
-import { cloneControl } from '../core/controlSnapshot'
-import type { ControlSnapshot, SessionContext } from '../core/snapshots'
-import type { ControlMode, ResolvedConstraint } from '../core/types'
-import { intersectPlane } from '../math/ray'
-import type { BaseInteractionDetail } from './details'
+import type { ControllerFrameContext } from '../render/types'
+import type { ResolvedOptions } from '../types'
+import { cloneControl } from './controlSnapshot'
+import type { ControlSnapshot, ControllerInputParam, DragDetailSeed } from './types'
+import type { ResolvedConstraint } from '../geometry/types'
+import type { ControlMode } from '../types'
+import { intersectPlane } from '../util/ray'
 
 const scratchProj = new Cartesian3()
 const scratchToCamWorld = new Cartesian3()
 const scratchRotation = new Matrix3()
 const scratchScale = new Cartesian3()
 
-export interface DragDetailSeed extends BaseInteractionDetail {
-  readonly toCameraLocal: Cartesian3
-  readonly planeNormalLocal: Cartesian3
-}
-
 export function createDragDetailSeed(
-  input: PointerInput,
-  session: SessionContext,
-  frame: ControllerFrameContext,
+  param: ControllerInputParam,
   options: ResolvedOptions,
 ): DragDetailSeed | null {
-  const control = cloneControl(session.start.control)
-  const toCameraLocal = computeToCameraLocal(control, frame)
+  const control = cloneControl(param.start.control)
+  const toCameraLocal = computeToCameraLocal(control, param.frame)
   const planeNormalLocal = resolveDragPlaneNormalLocal(
-    session.mode,
-    session.handle.constraint,
+    param.handle.mode,
+    param.handle.constraint,
     toCameraLocal,
   )
   if (!planeNormalLocal) return null
@@ -43,7 +35,7 @@ export function createDragDetailSeed(
   if (!normalizeOrNull(planeNormalWorld)) return null
 
   const planeOriginWorld = Cartesian3.clone(control.translation, new Cartesian3())
-  const hit = intersectPlane(input.rayWorld, planeOriginWorld, planeNormalWorld)
+  const hit = intersectPlane(param.input.rayWorld, planeOriginWorld, planeNormalWorld)
   if (!hit) return null
 
   return {
@@ -102,11 +94,11 @@ function resolveDragPlaneNormalLocal(
 }
 
 export function localDirectionToWorld(
-  detail: BaseInteractionDetail,
+  seed: DragDetailSeed,
   local: Cartesian3,
   result = new Cartesian3(),
 ): Cartesian3 | null {
-  Matrix4.multiplyByPointAsVector(detail.localToWorldAtStart, local, result)
+  Matrix4.multiplyByPointAsVector(seed.localToWorldAtStart, local, result)
   return normalizeOrNull(result)
 }
 
@@ -115,7 +107,7 @@ export function normalizeOrNull(v: Cartesian3): Cartesian3 | null {
   return Cartesian3.normalize(v, v)
 }
 
-//认为gizmoScale是不变的，只是收到屏幕像素坐标缩放影响 所以只取x即可
+//认为gizmoScale是不变的，只是受到屏幕像素坐标缩放影响 所以只取x即可
 export function gizmoScale(frame: ControllerFrameContext): number {
   const magnitude = Matrix4.getScale(frame.gizmoMatrix, scratchScale).x
   return magnitude > 1e-12 ? magnitude : 1

@@ -1,9 +1,10 @@
 import { Cartesian3, Matrix3, Matrix4 } from '@cesium/engine'
-import type { ResolvedOptions } from '../core/options'
-import type { InputSource } from '../core/ports'
-import type { ControlSnapshot } from '../core/snapshots'
-import { AXES, type Triple } from '../core/types'
-import { viewRotation } from '../math/matrix'
+import type { ResolvedOptions } from '../types'
+import type { InputSource } from '../input/types'
+import type { ControlSnapshot } from '../controller/types'
+import { AXES } from '../constants'
+import type { Triple } from '../types'
+import { viewRotation } from '../util/matrix'
 
 /**
  * 职责：由一个生效 TRS 与当前相机，算出该帧的 gizmo 矩阵族。

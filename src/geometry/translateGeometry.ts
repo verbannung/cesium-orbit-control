@@ -6,7 +6,7 @@ import {
   buildViewRing,
   buildViewRingMeshes,
 } from './geometryUtil'
-import { Handle } from './types'
+import { Handle } from './handle'
 
 export class TranslateGeometry extends BaseGeometry {
   build(): void {

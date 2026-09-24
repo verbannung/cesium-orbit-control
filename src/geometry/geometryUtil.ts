@@ -21,7 +21,9 @@ import {
   Primitive,
   PrimitiveType,
 } from '@cesium/engine'
-import type { Handle, HandleId, MeshData } from './types'
+import { RING_RADIUS } from '../constants'
+import type { HandleId, MeshData } from './types'
+import type { Handle } from './handle'
 import ringFS from '../shader/ringFS.glsl?raw'
 import ringFSNoCull from '../shader/ringFSNoCull.glsl?raw'
 import ringMaterial from '../shader/ringMaterial.glsl?raw'
@@ -35,8 +37,6 @@ export const HEAD_SLICES = 8
 export const BOX_HALF = 0.05
 export const STEM_WIDTH_PX = 2
 export const TUBE_RADIUS = 0.03
-export const RING_RADIUS = 1.0
-export const VIEW_AXIS_RADIUS = 0.22
 export const VIEW_PLANE_RADIUS = 0.22
 export const RING_HALF_WIDTH_PX = 3
 export const PLANE_MIN = 0.4

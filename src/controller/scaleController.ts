@@ -1,17 +1,19 @@
 import { Cartesian3, Matrix4 } from '@cesium/engine'
-import type { ControllerFrameContext } from '../core/frame'
-import type { ResolvedOptions } from '../core/options'
-import type { PointerInput } from '../core/pointer'
-import type { ControlSnapshot, SessionContext, WorldSegment } from '../core/snapshots'
+import type { ControllerFrameContext } from '../render/types'
+import type { ResolvedOptions } from '../types'
+import type { PointerInput } from '../input/types'
 import type {
-  DragComputeResult,
-  ScaleSpatialState,
-  ScaleTransformState,
-} from '../core/state'
-import { intersectPlane } from '../math/ray'
-import { snap } from '../math/snap'
+  ControllerInputParam,
+  ControlSnapshot,
+  DragFrameOutcome,
+  EmptyDragDetail,
+  ScaleSessionContext,
+} from './types'
+import type { WorldSegment } from '../types'
+import type { ScaleSpatialState, ScaleTransformState } from '../overlay/types'
+import { intersectPlane } from '../util/ray'
+import { snap } from '../util/snap'
 import { createDragDetailSeed, gizmoScale, localDirectionToWorld } from './dragMath'
-import type { ScaleDetail } from './details'
 import { DragSession } from './dragSession'
 
 const AXIS_GUIDE_LENGTH = 6
@@ -26,21 +28,17 @@ interface TransformResult {
   readonly pointerWorld: Cartesian3
 }
 
-export class ScaleController extends DragSession<ScaleDetail> {
+export class ScaleController extends DragSession<ScaleSessionContext, EmptyDragDetail> {
   constructor(private readonly options: ResolvedOptions) {
     super()
   }
 
-  protected createDetail(
-    input: PointerInput,
-    session: SessionContext,
-    frame: ControllerFrameContext,
-  ): ScaleDetail | null {
-    const seed = createDragDetailSeed(input, session, frame, this.options)
+  protected createSessionContext(param: ControllerInputParam): ScaleSessionContext | null {
+    const seed = createDragDetailSeed(param, this.options)
     if (!seed) return null
 
-    const constraint = session.handle.constraint
-    let resolved: ScaleDetail['constraint']
+    const constraint = param.handle.constraint
+    let resolved: ScaleSessionContext['constraint']
 
     if (constraint.kind === 'axis') {
       const axisLocal = Cartesian3.clone(constraint.axisLocal, new Cartesian3())
@@ -72,6 +70,7 @@ export class ScaleController extends DragSession<ScaleDetail> {
 
     return {
       mode: 'scale',
+      handle: param.handle,
       startCenterPointWorld: seed.startCenterPointWorld,
       startPointWorld: seed.startPointWorld,
       planeOriginWorld: seed.planeOriginWorld,
@@ -81,6 +80,10 @@ export class ScaleController extends DragSession<ScaleDetail> {
       startControl: seed.startControl,
       constraint: resolved,
     }
+  }
+
+  protected createInitialDetail(): EmptyDragDetail {
+    return {}
   }
 
   /**
@@ -93,25 +96,25 @@ export class ScaleController extends DragSession<ScaleDetail> {
    */
   private computeTransform(
     input: PointerInput,
-    detail: ScaleDetail,
+    context: ScaleSessionContext,
   ): TransformResult | null {
     const current = intersectPlane(
       input.rayWorld,
-      detail.planeOriginWorld,
-      detail.planeNormalWorld,
+      context.planeOriginWorld,
+      context.planeNormalWorld,
       scratchCurrent,
     )
     if (!current) return null
 
-    startOffsetLocal(detail, current, scratchCurrentLocal)
+    startOffsetLocal(context, current, scratchCurrentLocal)
 
     let denominator: number
     let numerator: number
-    if (detail.constraint.kind === 'axis') {
-      denominator = detail.constraint.startComponent
-      numerator = Cartesian3.dot(scratchCurrentLocal, detail.constraint.axisLocal)
+    if (context.constraint.kind === 'axis') {
+      denominator = context.constraint.startComponent
+      numerator = Cartesian3.dot(scratchCurrentLocal, context.constraint.axisLocal)
     } else {
-      denominator = detail.constraint.startRadiusWorld
+      denominator = context.constraint.startRadiusWorld
       numerator = Cartesian3.magnitude(scratchCurrentLocal)
     }
 
@@ -121,9 +124,9 @@ export class ScaleController extends DragSession<ScaleDetail> {
     if (!Number.isFinite(rawRatio)) return null
     const snappedRatio = snap(rawRatio, this.options.scaleSnap)
 
-    const start = detail.startControl.scale
-    const uniform = detail.constraint.kind === 'uniform'
-    const axisConstraint = detail.constraint.kind === 'axis' ? detail.constraint : null
+    const start = context.startControl.scale
+    const uniform = context.constraint.kind === 'uniform'
+    const axisConstraint = context.constraint.kind === 'axis' ? context.constraint : null
     // 吸附后的比例先统一作用于三个分量，再逐轴执行 minScale。
     const resultingScale = Cartesian3.multiplyByScalar(start, snappedRatio, new Cartesian3())
     resultingScale.x = Math.max(this.options.minScale, resultingScale.x)
@@ -151,8 +154,8 @@ export class ScaleController extends DragSession<ScaleDetail> {
         uniform,
       },
       control: {
-        translation: detail.startControl.translation,
-        rotation: detail.startControl.rotation,
+        translation: context.startControl.translation,
+        rotation: context.startControl.rotation,
         scale: resultingScale,
       },
       pointerWorld: Cartesian3.clone(current, new Cartesian3()),
@@ -161,42 +164,50 @@ export class ScaleController extends DragSession<ScaleDetail> {
 
   protected computeFrame(
     input: PointerInput,
-    detail: ScaleDetail,
-    session: SessionContext,
+    context: ScaleSessionContext,
+    detail: EmptyDragDetail,
     frame: ControllerFrameContext,
-  ): DragComputeResult | null {
-    const result = this.computeTransform(input, detail)
+  ): DragFrameOutcome<EmptyDragDetail> | null {
+    const result = this.computeTransform(input, context)
     if (!result) return null
-    const spatial = this.buildWorldSpatialState(result, detail, frame)
+    const spatial = this.buildWorldSpatialState(result, context, frame)
     return {
-      effectiveControl: result.control,
-      overlay: { handle: session.handle, mode: 'scale', transform: result.transform, spatial },
+      result: {
+        effectiveControl: result.control,
+        overlay: {
+          handle: context.handle,
+          mode: 'scale',
+          transform: result.transform,
+          spatial,
+        },
+      },
+      detail,
     }
   }
 
   private buildWorldSpatialState(
     result: TransformResult,
-    detail: ScaleDetail,
+    context: ScaleSessionContext,
     frame: ControllerFrameContext,
   ): ScaleSpatialState {
-    const isAxis = detail.constraint.kind === 'axis'
+    const isAxis = context.constraint.kind === 'axis'
     const scale = gizmoScale(frame)
 
     return {
-      startPointWorld: Cartesian3.clone(detail.startPointWorld, new Cartesian3()),
+      startPointWorld: Cartesian3.clone(context.startPointWorld, new Cartesian3()),
       currentPointWorld: Cartesian3.clone(result.pointerWorld, new Cartesian3()),
       axisGuideWorld:
-        detail.constraint.kind === 'axis'
+        context.constraint.kind === 'axis'
           ? segmentThrough(
-              detail.planeOriginWorld,
-              detail.constraint.axisWorld,
+              context.planeOriginWorld,
+              context.constraint.axisWorld,
               AXIS_GUIDE_LENGTH * scale,
             )
           : null,
       movementArrowWorld: isAxis
         ? null
         : {
-            start: Cartesian3.clone(detail.startPointWorld, new Cartesian3()),
+            start: Cartesian3.clone(context.startPointWorld, new Cartesian3()),
             end: Cartesian3.clone(result.pointerWorld, new Cartesian3()),
           },
       labelAnchorWorld: Cartesian3.clone(result.pointerWorld, new Cartesian3()),

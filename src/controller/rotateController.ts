@@ -1,23 +1,19 @@
 import { Cartesian3, Matrix4, Quaternion } from '@cesium/engine'
-import type { ControllerFrameContext } from '../core/frame'
-import type { ResolvedOptions } from '../core/options'
-import type { PointerInput } from '../core/pointer'
+import type { ControllerFrameContext } from '../render/types'
+import type { ResolvedOptions } from '../types'
+import type { PointerInput } from '../input/types'
 import type {
+  ControllerInputParam,
   ControlSnapshot,
-  SessionContext,
-  WorldPolygon,
-  WorldPolyline,
-  WorldSegment,
-} from '../core/snapshots'
-import type {
-  DragComputeResult,
-  RotateSpatialState,
-  RotateTransformState,
-} from '../core/state'
-import { RING_RADIUS, VIEW_AXIS_RADIUS } from '../geometry/geometryUtil'
-import { intersectPlane } from '../math/ray'
+  DragFrameOutcome,
+  RotateDetail,
+  RotateSessionContext,
+} from './types'
+import type { WorldPolygon, WorldPolyline, WorldSegment } from '../types'
+import type { RotateSpatialState, RotateTransformState } from '../overlay/types'
+import { RING_RADIUS, VIEW_AXIS_RADIUS } from '../constants'
+import { intersectPlane } from '../util/ray'
 import { createDragDetailSeed, gizmoScale, normalizeOrNull } from './dragMath'
-import type { RotateDetail, RotateRuntime } from './details'
 import { DragSession } from './dragSession'
 
 const RING_SEGMENTS = 64
@@ -34,21 +30,17 @@ interface TransformResult {
   readonly transform: RotateTransformState
   readonly control: ControlSnapshot
   readonly pointerWorld: Cartesian3
+  /** 本帧计算成功后供下一帧使用的角度连续性结果。 */
+  readonly nextDetail: RotateDetail
 }
 
-export class RotateController extends DragSession<RotateDetail> {
-  private runtime: RotateRuntime | null = null
-
+export class RotateController extends DragSession<RotateSessionContext, RotateDetail> {
   constructor(private readonly options: ResolvedOptions) {
     super()
   }
 
-  protected createDetail(
-    input: PointerInput,
-    session: SessionContext,
-    frame: ControllerFrameContext,
-  ): RotateDetail | null {
-    const seed = createDragDetailSeed(input, session, frame, this.options)
+  protected createSessionContext(param: ControllerInputParam): RotateSessionContext | null {
+    const seed = createDragDetailSeed(param, this.options)
     if (!seed) return null
 
     // 旋转平面的法线就是旋转轴，createDragDetailSeed 已按此规则建面。
@@ -72,6 +64,7 @@ export class RotateController extends DragSession<RotateDetail> {
 
     return {
       mode: 'rotate',
+      handle: param.handle,
       startCenterPointWorld: seed.startCenterPointWorld,
       startPointWorld: seed.startPointWorld,
       planeOriginWorld: seed.planeOriginWorld,
@@ -84,16 +77,12 @@ export class RotateController extends DragSession<RotateDetail> {
       startDirectionLocal,
       startDirectionWorld,
       radiusWorld,
-      viewAligned: session.handle.constraint.kind === 'view',
+      viewAligned: param.handle.constraint.kind === 'view',
     }
   }
 
-  protected onBegin(): void {
-    this.runtime = { previousRawAngle: 0, completedTurns: 0 }
-  }
-
-  protected onReset(): void {
-    this.runtime = null
+  protected createInitialDetail(): RotateDetail {
+    return { previousRawAngle: 0, completedTurns: 0 }
   }
 
   /**
@@ -108,26 +97,26 @@ export class RotateController extends DragSession<RotateDetail> {
    */
   private computeTransform(
     input: PointerInput,
+    context: RotateSessionContext,
     detail: RotateDetail,
-    runtime: RotateRuntime,
   ): TransformResult | null {
     const current = intersectPlane(
       input.rayWorld,
-      detail.planeOriginWorld,
-      detail.planeNormalWorld,
+      context.planeOriginWorld,
+      context.planeNormalWorld,
       scratchCurrent,
     )
     if (!current) return null
 
-    Cartesian3.subtract(detail.startPointWorld, detail.planeOriginWorld, scratchStart)
-    Cartesian3.subtract(current, detail.planeOriginWorld, scratchQ)
+    Cartesian3.subtract(context.startPointWorld, context.planeOriginWorld, scratchStart)
+    Cartesian3.subtract(current, context.planeOriginWorld, scratchQ)
 
     //屏幕交点小于
-    if (Cartesian3.magnitude(scratchQ) < this.options.minRotateRadius * detail.radiusWorld) {
+    if (Cartesian3.magnitude(scratchQ) < this.options.minRotateRadius * context.radiusWorld) {
       return null
     }
 
-    const axis = detail.axisWorld
+    const axis = context.axisWorld
     const sinTheta = Cartesian3.dot(
       Cartesian3.cross(scratchStart, scratchQ, scratchCross),
       axis,
@@ -136,18 +125,18 @@ export class RotateController extends DragSession<RotateDetail> {
     const rawAngle = Math.atan2(sinTheta, cosTheta)
     if (!Number.isFinite(rawAngle)) return null
 
-    // 计算成功后才推进 runtime。
-    const d = rawAngle - runtime.previousRawAngle
-    if (d > Math.PI) runtime.completedTurns--
-    else if (d < -Math.PI) runtime.completedTurns++
-    runtime.previousRawAngle = rawAngle
+    // 计算成功后才推进跨帧结果。
+    const d = rawAngle - detail.previousRawAngle
+    let completedTurns = detail.completedTurns
+    if (d > Math.PI) completedTurns--
+    else if (d < -Math.PI) completedTurns++
 
-    const accumulatedAngle = rawAngle + 2 * Math.PI * runtime.completedTurns
+    const accumulatedAngle = rawAngle + 2 * Math.PI * completedTurns
 
     const deltaRotation = Quaternion.fromAxisAngle(axis, accumulatedAngle, new Quaternion())
     const resultingRotation = Quaternion.multiply(
       deltaRotation,
-      detail.startControl.rotation,
+      context.startControl.rotation,
       new Quaternion(),
     )
 
@@ -162,56 +151,63 @@ export class RotateController extends DragSession<RotateDetail> {
         resultingRotation,
       },
       control: {
-        translation: detail.startControl.translation,
+        translation: context.startControl.translation,
         rotation: resultingRotation,
-        scale: detail.startControl.scale,
+        scale: context.startControl.scale,
       },
       pointerWorld: Cartesian3.clone(current, new Cartesian3()),
+      nextDetail: { previousRawAngle: rawAngle, completedTurns },
     }
   }
 
   protected computeFrame(
     input: PointerInput,
+    context: RotateSessionContext,
     detail: RotateDetail,
-    session: SessionContext,
     frame: ControllerFrameContext,
-  ): DragComputeResult | null {
-    const runtime = this.runtime
-    if (!runtime) return null
-    const result = this.computeTransform(input, detail, runtime)
+  ): DragFrameOutcome<RotateDetail> | null {
+    const result = this.computeTransform(input, context, detail)
     if (!result) return null
-    const spatial = this.buildWorldSpatialState(result, detail, frame)
+    const spatial = this.buildWorldSpatialState(result, context, frame)
     return {
-      effectiveControl: result.control,
-      overlay: { handle: session.handle, mode: 'rotate', transform: result.transform, spatial },
+      result: {
+        effectiveControl: result.control,
+        overlay: {
+          handle: context.handle,
+          mode: 'rotate',
+          transform: result.transform,
+          spatial,
+        },
+      },
+      detail: result.nextDetail,
     }
   }
 
   private buildWorldSpatialState(
     result: TransformResult,
-    detail: RotateDetail,
+    context: RotateSessionContext,
     frame: ControllerFrameContext,
   ): RotateSpatialState {
-    const center = detail.planeOriginWorld
+    const center = context.planeOriginWorld
     const scale = gizmoScale(frame)
-    const radius = (detail.viewAligned ? VIEW_AXIS_RADIUS : RING_RADIUS) * scale
-    const axis = detail.axisWorld
+    const radius = (context.viewAligned ? VIEW_AXIS_RADIUS : RING_RADIUS) * scale
+    const axis = context.axisWorld
     const start = Cartesian3.multiplyByScalar(
-      detail.startDirectionWorld,
+      context.startDirectionWorld,
       radius,
       new Cartesian3(),
     )
 
     return {
       centerWorld: Cartesian3.clone(center, new Cartesian3()),
-      startPointWorld: Cartesian3.clone(detail.startPointWorld, new Cartesian3()),
+      startPointWorld: Cartesian3.clone(context.startPointWorld, new Cartesian3()),
       currentPointWorld: Cartesian3.clone(result.pointerWorld, new Cartesian3()),
       ringWorld: buildRing(center, start, axis),
       sectorWorld: buildSector(center, start, axis, result.transform.displayAngle),
-      axisGuideWorld: !detail.viewAligned
+      axisGuideWorld: !context.viewAligned
         ? segmentThrough(center, axis, LONG_AXIS_EXTENT * scale)
         : null,
-      normalGuideWorld: !detail.viewAligned
+      normalGuideWorld: !context.viewAligned
         ? {
             start: Cartesian3.clone(center, new Cartesian3()),
             end: Cartesian3.add(

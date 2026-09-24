@@ -1,24 +1,29 @@
 import { Cartesian3, Matrix4 } from '@cesium/engine'
-import type { ControllerFrameContext } from '../core/frame'
-import type { ResolvedOptions } from '../core/options'
-import type { PointerInput } from '../core/pointer'
-import type { ControlSnapshot, SessionContext, WorldPolygon, WorldPolyline, WorldSegment } from '../core/snapshots'
+import type { ControllerFrameContext } from '../render/types'
+import type { ResolvedOptions } from '../types'
+import type { PointerInput } from '../input/types'
 import type {
-  DragComputeResult,
+  ControllerInputParam,
+  ControlSnapshot,
+  DragFrameOutcome,
+  EmptyDragDetail,
+  TranslateSessionContext,
+} from './types'
+import type { WorldPolygon, WorldPolyline, WorldSegment } from '../types'
+import type {
   TranslateGuideWorld,
   TranslateSpatialState,
   TranslateTransformState,
-} from '../core/state'
-import { AXES } from '../core/types'
-import { intersectPlane } from '../math/ray'
-import { snap } from '../math/snap'
+} from '../overlay/types'
+import { AXES } from '../constants'
+import { intersectPlane } from '../util/ray'
+import { snap } from '../util/snap'
 import {
   createDragDetailSeed,
   gizmoScale,
   localDirectionToWorld,
   normalizeOrNull,
 } from './dragMath'
-import type { TranslateDetail } from './details'
 import { DragSession } from './dragSession'
 
 const AXIS_GUIDE_LENGTH = 1.5
@@ -38,21 +43,17 @@ interface TransformResult {
   readonly pointerWorld: Cartesian3
 }
 
-export class TranslateController extends DragSession<TranslateDetail> {
+export class TranslateController extends DragSession<TranslateSessionContext, EmptyDragDetail> {
   constructor(private readonly options: ResolvedOptions) {
     super()
   }
 
-  protected createDetail(
-    input: PointerInput,
-    session: SessionContext,
-    frame: ControllerFrameContext,
-  ): TranslateDetail | null {
-    const seed = createDragDetailSeed(input, session, frame, this.options)
+  protected createSessionContext(param: ControllerInputParam): TranslateSessionContext | null {
+    const seed = createDragDetailSeed(param, this.options)
     if (!seed) return null
 
-    const constraint = session.handle.constraint
-    let resolved: TranslateDetail['constraint']
+    const constraint = param.handle.constraint
+    let resolved: TranslateSessionContext['constraint']
 
     if (constraint.kind === 'axis') {
       const axisLocal = Cartesian3.clone(constraint.axisLocal, new Cartesian3())
@@ -73,6 +74,7 @@ export class TranslateController extends DragSession<TranslateDetail> {
 
     return {
       mode: 'translate',
+      handle: param.handle,
       startCenterPointWorld: seed.startCenterPointWorld,
       startPointWorld: seed.startPointWorld,
       planeOriginWorld: seed.planeOriginWorld,
@@ -82,6 +84,10 @@ export class TranslateController extends DragSession<TranslateDetail> {
       startControl: seed.startControl,
       constraint: resolved,
     }
+  }
+
+  protected createInitialDetail(): EmptyDragDetail {
+    return {}
   }
 
   /**
@@ -99,46 +105,46 @@ export class TranslateController extends DragSession<TranslateDetail> {
    */
   private computeTransform(
     input: PointerInput,
-    detail: TranslateDetail,
+    context: TranslateSessionContext,
   ): TransformResult | null {
     const current = intersectPlane(
       input.rayWorld,
-      detail.planeOriginWorld,
-      detail.planeNormalWorld,
+      context.planeOriginWorld,
+      context.planeNormalWorld,
       scratchCurrent,
     )
     if (!current) return null
 
     // Δ_W = p − p₀，Δ_L = R₀ᵀ Δ_W
-    Cartesian3.subtract(current, detail.startPointWorld, scratchDeltaW)
-    Matrix4.multiplyByPointAsVector(detail.worldToLocalAtStart, scratchDeltaW, scratchDeltaL)
+    Cartesian3.subtract(current, context.startPointWorld, scratchDeltaW)
+    Matrix4.multiplyByPointAsVector(context.worldToLocalAtStart, scratchDeltaW, scratchDeltaL)
     const rawDeltaLocal = Cartesian3.clone(scratchDeltaL, new Cartesian3())
 
     // 约束投影（局部系，R₀ 正交保证投影有效）
-    if (detail.constraint.kind === 'axis') {
-      const a = detail.constraint.axisLocal
+    if (context.constraint.kind === 'axis') {
+      const a = context.constraint.axisLocal
       Cartesian3.multiplyByScalar(a, Cartesian3.dot(scratchDeltaL, a), scratchComp)
       Cartesian3.clone(scratchComp, scratchDeltaL)
-    } else if (detail.constraint.kind === 'plane') {
-      const c = detail.constraint.normalLocal
+    } else if (context.constraint.kind === 'plane') {
+      const c = context.constraint.normalLocal
       Cartesian3.multiplyByScalar(c, Cartesian3.dot(scratchDeltaL, c), scratchComp)
       Cartesian3.subtract(scratchDeltaL, scratchComp, scratchDeltaL)
     }
 
     // ℓ = Δ_L ⊘ S₀，snap 后回到世界长度
-    const s = detail.startControl.scale
+    const s = context.startControl.scale
     scratchApplied.x = snap(scratchDeltaL.x / s.x, this.options.translateSnap) * s.x
     scratchApplied.y = snap(scratchDeltaL.y / s.y, this.options.translateSnap) * s.y
     scratchApplied.z = snap(scratchDeltaL.z / s.z, this.options.translateSnap) * s.z
 
     const appliedDeltaLocal = Cartesian3.clone(scratchApplied, new Cartesian3())
     const appliedDeltaWorld = Matrix4.multiplyByPointAsVector(
-      detail.localToWorldAtStart,
+      context.localToWorldAtStart,
       appliedDeltaLocal,
       new Cartesian3(),
     )
     const resultingTranslation = Cartesian3.add(
-      detail.startControl.translation,
+      context.startControl.translation,
       appliedDeltaWorld,
       new Cartesian3(),
     )
@@ -152,8 +158,8 @@ export class TranslateController extends DragSession<TranslateDetail> {
       },
       control: {
         translation: resultingTranslation,
-        rotation: detail.startControl.rotation,
-        scale: detail.startControl.scale,
+        rotation: context.startControl.rotation,
+        scale: context.startControl.scale,
       },
       pointerWorld: Cartesian3.clone(current, new Cartesian3()),
     }
@@ -161,64 +167,72 @@ export class TranslateController extends DragSession<TranslateDetail> {
 
   protected computeFrame(
     input: PointerInput,
-    detail: TranslateDetail,
-    session: SessionContext,
+    context: TranslateSessionContext,
+    detail: EmptyDragDetail,
     frame: ControllerFrameContext,
-  ): DragComputeResult | null {
-    const result = this.computeTransform(input, detail)
+  ): DragFrameOutcome<EmptyDragDetail> | null {
+    const result = this.computeTransform(input, context)
     if (!result) return null
-    const spatial = this.buildWorldSpatialState(result, detail, frame)
+    const spatial = this.buildWorldSpatialState(result, context, frame)
     return {
-      effectiveControl: result.control,
-      overlay: { handle: session.handle, mode: 'translate', transform: result.transform, spatial },
+      result: {
+        effectiveControl: result.control,
+        overlay: {
+          handle: context.handle,
+          mode: 'translate',
+          transform: result.transform,
+          spatial,
+        },
+      },
+      detail,
     }
   }
 
   private buildWorldSpatialState(
     result: TransformResult,
-    detail: TranslateDetail,
+    context: TranslateSessionContext,
     frame: ControllerFrameContext,
   ): TranslateSpatialState {
     const center = result.transform.resultingTranslation
     const scale = gizmoScale(frame)
 
     return {
-      startPointWorld: Cartesian3.clone(detail.startPointWorld, new Cartesian3()),
+      startPointWorld: Cartesian3.clone(context.startPointWorld, new Cartesian3()),
       currentPointWorld: Cartesian3.clone(result.pointerWorld, new Cartesian3()),
-      guide: this.buildGuide(detail, center, scale, result.pointerWorld),
+      guide: this.buildGuide(context, center, scale, result.pointerWorld),
       labelAnchorWorld: Cartesian3.clone(center, new Cartesian3()),
     }
   }
 
   private buildGuide(
-    detail: TranslateDetail,
+    context: TranslateSessionContext,
     center: Cartesian3,
     scale: number,
     currentWorld: Cartesian3,
   ): TranslateGuideWorld {
-    if (detail.constraint.kind === 'axis') {
+    if (context.constraint.kind === 'axis') {
       return {
         kind: 'axis',
         line: segmentThrough(
-          detail.startCenterPointWorld,
-          detail.constraint.axisWorld,
+          context.startCenterPointWorld,
+          context.constraint.axisWorld,
           AXIS_GUIDE_LENGTH * scale,
         ),
       }
     }
 
-    if (detail.constraint.kind === 'plane') {
+    if (context.constraint.kind === 'plane') {
       return {
         kind: 'plane',
-        polygon: planeQuad(center, detail.constraint.normalWorld, PLANE_GUIDE_SIZE * scale),
+        polygon: planeQuad(center, context.constraint.normalWorld, PLANE_GUIDE_SIZE * scale),
       }
     }
 
     return {
       kind: 'view',
-      ring: ringAround(center, detail.constraint.planeNormalWorld, VIEW_GUIDE_RADIUS * scale),
+      ring: ringAround(center, context.constraint.planeNormalWorld, VIEW_GUIDE_RADIUS * scale),
       movementArrow: {
-        start: Cartesian3.clone(detail.startPointWorld, new Cartesian3()),
+        start: Cartesian3.clone(context.startPointWorld, new Cartesian3()),
         end: Cartesian3.clone(currentWorld, new Cartesian3()),
       },
     }

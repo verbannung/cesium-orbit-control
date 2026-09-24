@@ -1,9 +1,13 @@
-import type { Cartesian2, Cartesian3, Matrix4 } from '@cesium/engine'
-import type {
-  CameraSnapshot,
-  ControlSnapshot,
-  ViewportSnapshot,
-} from './snapshots'
+import type { Matrix4 } from '@cesium/engine'
+import type { ControlSnapshot } from '../controller/types'
+import type { CameraSnapshot, ViewportSnapshot } from '../input/types'
+import type { DragOverlayState } from '../overlay/types'
+
+/**
+ * Render 模块协议：RenderSystem 向 Controller / Geometry 提供的帧切片，
+ * 以及 Geometry / Overlay / modelMatrix 的渲染分发出口。
+ * 本文件只允许出现类型，不得导出任何运行时值。
+ */
 
 export interface FrameEnvironment {
   readonly camera: CameraSnapshot
@@ -18,7 +22,6 @@ export interface FrameEnvironment {
  */
 export interface ControllerFrameContext {
   readonly environment: FrameEnvironment
-  readonly committedControl: ControlSnapshot //模型 R/S/T
   readonly gizmoMatrix: Matrix4
   readonly viewMatrix: Matrix4
   readonly axisFlipMatrix: Matrix4
@@ -34,15 +37,9 @@ export interface GeometryFrameContext {
   readonly axisFlipMatrix: Matrix4
 }
 
-/**
- * Overlay 的帧切片：只有屏幕能力。
- * 故意不提供 gizmoMatrix / viewMatrix / axisFlipMatrix /
- * screenToWorldRay，
- * 从类型层面阻止 Overlay 重新推导交互语义。
- */
-export interface OverlayFrameContext {
-  readonly viewport: ViewportSnapshot
-  readonly pixelRatio: number
-
-  worldToScreen(point: Cartesian3, result?: Cartesian2): Cartesian2 | null
+/** RenderSystem 每帧的分发出口。 */
+export interface RenderSystemSinks {
+  onGeometryFrame(frame: GeometryFrameContext): void
+  onOverlayFrame(overlay: DragOverlayState | null): void
+  onModelMatrix(modelMatrix: Matrix4): void
 }
