@@ -3,7 +3,11 @@
 !.gitignore
 !package.json
 !package-lock.json
-!Readme.md
+!README.md
+!README.zh-CN.md
+!translate.png
+!rotate.png
+!scale.png
 !tsconfig.json
 !tsconfig.build.json
 !vite.config.ts
