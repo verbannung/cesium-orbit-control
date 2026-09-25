@@ -1,5 +1,5 @@
 import { Matrix4 } from '@cesium/engine'
-import { cloneControl, identityControl } from '../controller/controlSnapshot'
+import { cloneControl, identityControl } from '../controller/controllerUtil'
 import type {
   ControllerFrameContext,
   FrameEnvironment,
@@ -76,16 +76,15 @@ export class RenderSystem {
   }
 
   render(): void {
+    this.cachedCameraSnapshot = null
+
     const effectiveControl = this.pendingResult?.effectiveControl ?? this.committedControl
     const dragging = this.pendingResult !== null
 
     this.gizmoFrame.update(effectiveControl, dragging)
-    this.frameCounter++
-
-    const result = this.pendingResult
 
     this.sinks.onGeometryFrame(this.createGeometryFrame(effectiveControl))
-    this.sinks.onOverlayFrame(result?.overlay ?? null)
+    this.sinks.onOverlayFrame(this.pendingResult?.overlay ?? null)
     this.emitModelMatrix(effectiveControl)
   }
 
@@ -120,16 +119,10 @@ export class RenderSystem {
   }
 
   private cachedCameraSnapshot: CameraSnapshot | null = null
-  private cachedCameraFrame = -1
-  private frameCounter = 0
 
   /** 同一帧内多个切片共用一份相机快照，避免重复克隆矩阵。 */
   private cachedCamera(): CameraSnapshot {
-    if (this.cachedCameraFrame !== this.frameCounter || !this.cachedCameraSnapshot) {
-      this.cachedCameraSnapshot = this.input.getCameraSnapshot()
-      this.cachedCameraFrame = this.frameCounter
-    }
-    return this.cachedCameraSnapshot
+    return (this.cachedCameraSnapshot ??= this.input.getCameraSnapshot())
   }
 
   private emitModelMatrix(control: ControlSnapshot): void {
@@ -141,6 +134,7 @@ export class RenderSystem {
   destroy(): void {
     this.input.removePreRender()
     this.pendingResult = null
+    this.cachedCameraSnapshot = null
     this.isBind = false
   }
 }

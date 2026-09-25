@@ -1,11 +1,38 @@
-import { Cartesian3, Matrix3, Matrix4 } from '@cesium/engine'
-import type { ControllerFrameContext } from '../render/types'
-import type { ResolvedOptions } from '../types'
-import { cloneControl } from './controlSnapshot'
-import type { ControlSnapshot, ControllerInputParam, DragDetailSeed } from './types'
+import { Cartesian3, Matrix3, Matrix4, Quaternion } from '@cesium/engine'
 import type { ResolvedConstraint } from '../geometry/types'
-import type { ControlMode } from '../types'
+import type { ControllerFrameContext } from '../render/types'
+import type { ControlMode, ResolvedOptions } from '../types'
 import { intersectPlane } from '../util/ray'
+import type { ControlSnapshot, ControllerInputParam, DragDetailSeed } from './types'
+
+/* ---------------------------- ControlSnapshot 工具 ---------------------------- */
+
+/** 发布边界上的深拷贝：Cesium 数学类型可变，跨模块传递必须拷贝。 */
+export function cloneControl(control: ControlSnapshot): ControlSnapshot {
+  return {
+    translation: Cartesian3.clone(control.translation, new Cartesian3()),
+    rotation: Quaternion.clone(control.rotation, new Quaternion()),
+    scale: Cartesian3.clone(control.scale, new Cartesian3()),
+  }
+}
+
+export function identityControl(): ControlSnapshot {
+  return {
+    translation: new Cartesian3(),
+    rotation: Quaternion.clone(Quaternion.IDENTITY, new Quaternion()),
+    scale: new Cartesian3(1, 1, 1),
+  }
+}
+
+export function controlEquals(a: ControlSnapshot, b: ControlSnapshot): boolean {
+  return (
+    Cartesian3.equals(a.translation, b.translation) &&
+    Quaternion.equals(a.rotation, b.rotation) &&
+    Cartesian3.equals(a.scale, b.scale)
+  )
+}
+
+/* ------------------------------ 拖拽几何工具 ------------------------------ */
 
 const scratchProj = new Cartesian3()
 const scratchToCamWorld = new Cartesian3()
@@ -29,7 +56,11 @@ export function createDragDetailSeed(
   }
 
   const rotation = Matrix3.fromQuaternion(control.rotation, new Matrix3())
-  const localToWorldAtStart = Matrix4.fromRotationTranslation(rotation, control.translation, new Matrix4())
+  const localToWorldAtStart = Matrix4.fromRotationTranslation(
+    rotation,
+    control.translation,
+    new Matrix4(),
+  )
   const worldToLocalAtStart = Matrix4.inverse(localToWorldAtStart, new Matrix4())
   const planeNormalWorld = Matrix3.multiplyByVector(rotation, planeNormalLocal, new Cartesian3())
   if (!normalizeOrNull(planeNormalWorld)) return null
@@ -56,7 +87,11 @@ function computeToCameraLocal(
   frame: ControllerFrameContext,
   result = new Cartesian3(),
 ): Cartesian3 {
-  Cartesian3.subtract(frame.environment.camera.positionWorld, control.translation, scratchToCamWorld)
+  Cartesian3.subtract(
+    frame.environment.camera.positionWorld,
+    control.translation,
+    scratchToCamWorld,
+  )
   if (Cartesian3.magnitudeSquared(scratchToCamWorld) < 1e-18) {
     Cartesian3.clone(Cartesian3.UNIT_Z, scratchToCamWorld)
   } else {
@@ -107,7 +142,7 @@ export function normalizeOrNull(v: Cartesian3): Cartesian3 | null {
   return Cartesian3.normalize(v, v)
 }
 
-//认为gizmoScale是不变的，只是受到屏幕像素坐标缩放影响 所以只取x即可
+/** gizmoScale 只受屏幕像素缩放影响，取 x 分量即可。 */
 export function gizmoScale(frame: ControllerFrameContext): number {
   const magnitude = Matrix4.getScale(frame.gizmoMatrix, scratchScale).x
   return magnitude > 1e-12 ? magnitude : 1

@@ -1,7 +1,6 @@
 import {
+  ArcGisMapServerImageryProvider,
   CesiumWidget,
-  Ion,
-  IonImageryProvider,
   ImageryLayer,
   EllipsoidTerrainProvider,
   Cartesian3,
@@ -20,10 +19,12 @@ import '@cesium/engine/Source/Widget/CesiumWidget.css'
 import { OrbitControl } from '../src/index'
 import type { ControlMode } from '../src/index'
 
-Ion.defaultAccessToken = import.meta.env.CESIUM_TOKEN
-
 const widget = new CesiumWidget('cesiumContainer', {
-  baseLayer: ImageryLayer.fromProviderAsync(IonImageryProvider.fromAssetId(2)),
+  baseLayer: ImageryLayer.fromProviderAsync(
+    ArcGisMapServerImageryProvider.fromUrl(
+      'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer',
+    ),
+  ),
   terrainProvider: new EllipsoidTerrainProvider(),
   scene3DOnly: true,
 });

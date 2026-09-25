@@ -6,7 +6,6 @@ import {
   distanceSquared,
   drawArrowHead,
   drawLabel,
-  extendLineToViewport,
   fillPolygon,
   projectPoint,
   projectPolygon,
@@ -14,7 +13,8 @@ import {
   projectSegment,
   strokePolyline,
   strokeSegment,
-} from './screen'
+  viewportClip,
+} from './screenUtil'
 
 const DEGENERATE_PX_SQUARED = 16
 
@@ -23,8 +23,7 @@ export class RotateOverlay implements Overlay<RotateOverlayState> {
 
   render(input: OverlayInputSource, state: RotateOverlayState): void {
     const context = this.context
-    const color = state.handle.color.toCssColorString()
-    const spatial = state.spatial
+    const color = state.color
 
     context.save()
     context.lineCap = 'round'
@@ -32,7 +31,7 @@ export class RotateOverlay implements Overlay<RotateOverlayState> {
     context.strokeStyle = color
     context.fillStyle = color
 
-    const ring = projectPolyline(input, spatial.ringWorld)
+    const ring = projectPolyline(input, state.ringWorld)
     if (ring) {
       context.setLineDash([])
       context.globalAlpha = 0.75
@@ -40,7 +39,7 @@ export class RotateOverlay implements Overlay<RotateOverlayState> {
       strokePolyline(context, ring)
     }
 
-    const sector = projectPolygon(input, spatial.sectorWorld)
+    const sector = projectPolygon(input, state.sectorWorld)
     if (sector) {
       context.setLineDash([])
       context.globalAlpha = 0.2
@@ -51,17 +50,17 @@ export class RotateOverlay implements Overlay<RotateOverlayState> {
       strokePolyline(context, [...sector, sector[0]])
     }
 
-    if (spatial.axisGuideWorld) {
-      this.drawAxisGuide(input, spatial.axisGuideWorld)
+    if (state.axisGuideWorld) {
+      this.drawAxisGuide(input, state.axisGuideWorld)
     }
-    if (spatial.normalGuideWorld) {
-      this.drawNormalGuide(input, spatial.normalGuideWorld)
+    if (state.normalGuideWorld) {
+      this.drawNormalGuide(input, state.normalGuideWorld)
     }
 
     // displayAngle 已由 Controller 决定，这里只做单位换算。
-    const anchor = projectPoint(input, spatial.labelAnchorWorld)
+    const anchor = projectPoint(input, state.labelAnchorWorld)
     if (anchor) {
-      const degrees = (state.transform.displayAngle * 180) / Math.PI
+      const degrees = (state.displayAngle * 180) / Math.PI
       const displayed = Math.abs(degrees) < 0.05 ? 0 : degrees
       context.globalAlpha = 1
       drawLabel(context, anchor, `${displayed.toFixed(1)}°`)
@@ -83,7 +82,8 @@ export class RotateOverlay implements Overlay<RotateOverlayState> {
       return
     }
 
-    const extended = extendLineToViewport(projected[0], projected[1], input.getViewport())
+    const { widthCss, heightCss } = input.getViewport()
+    const extended = viewportClip(projected[0], projected[1], widthCss, heightCss)
     const [start, end]: readonly [Cartesian2, Cartesian2] = extended ?? projected
     context.setLineDash([8, 5])
     strokeSegment(context, start, end)

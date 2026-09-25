@@ -4,16 +4,16 @@ import type { ResolvedOptions } from '../types'
 import type { PointerInput } from '../input/types'
 import type {
   ControllerInputParam,
-  ControlSnapshot,
   DragFrameOutcome,
   EmptyDragDetail,
   ScaleSessionContext,
+  ScaleTransformResult,
 } from './types'
 import type { WorldSegment } from '../types'
-import type { ScaleSpatialState, ScaleTransformState } from '../overlay/types'
+import type { ScaleOverlayState } from '../overlay/types'
 import { intersectPlane } from '../util/ray'
 import { snap } from '../util/snap'
-import { createDragDetailSeed, gizmoScale, localDirectionToWorld } from './dragMath'
+import { createDragDetailSeed, gizmoScale, localDirectionToWorld } from './controllerUtil'
 import { DragSession } from './dragSession'
 
 const AXIS_GUIDE_LENGTH = 6
@@ -21,12 +21,6 @@ const AXIS_GUIDE_LENGTH = 6
 const scratchCurrent = new Cartesian3()
 const scratchStartLocal = new Cartesian3()
 const scratchCurrentLocal = new Cartesian3()
-
-interface TransformResult {
-  readonly transform: ScaleTransformState
-  readonly control: ControlSnapshot
-  readonly pointerWorld: Cartesian3
-}
 
 export class ScaleController extends DragSession<ScaleSessionContext, EmptyDragDetail> {
   constructor(private readonly options: ResolvedOptions) {
@@ -97,7 +91,7 @@ export class ScaleController extends DragSession<ScaleSessionContext, EmptyDragD
   private computeTransform(
     input: PointerInput,
     context: ScaleSessionContext,
-  ): TransformResult | null {
+  ): ScaleTransformResult | null {
     const current = intersectPlane(
       input.rayWorld,
       context.planeOriginWorld,
@@ -146,13 +140,7 @@ export class ScaleController extends DragSession<ScaleSessionContext, EmptyDragD
     )
 
     return {
-      transform: {
-        rawRatio,
-        snappedRatio,
-        appliedFactor,
-        resultingScale,
-        uniform,
-      },
+      displayFactor: pickDisplayFactor(appliedFactor, uniform),
       control: {
         translation: context.startControl.translation,
         rotation: context.startControl.rotation,
@@ -170,32 +158,26 @@ export class ScaleController extends DragSession<ScaleSessionContext, EmptyDragD
   ): DragFrameOutcome<EmptyDragDetail> | null {
     const result = this.computeTransform(input, context)
     if (!result) return null
-    const spatial = this.buildWorldSpatialState(result, context, frame)
     return {
       result: {
         effectiveControl: result.control,
-        overlay: {
-          handle: context.handle,
-          mode: 'scale',
-          transform: result.transform,
-          spatial,
-        },
+        overlay: this.buildOverlay(result, context, frame),
       },
       detail,
     }
   }
 
-  private buildWorldSpatialState(
-    result: TransformResult,
+  private buildOverlay(
+    result: ScaleTransformResult,
     context: ScaleSessionContext,
     frame: ControllerFrameContext,
-  ): ScaleSpatialState {
+  ): ScaleOverlayState {
     const isAxis = context.constraint.kind === 'axis'
     const scale = gizmoScale(frame)
 
     return {
-      startPointWorld: Cartesian3.clone(context.startPointWorld, new Cartesian3()),
-      currentPointWorld: Cartesian3.clone(result.pointerWorld, new Cartesian3()),
+      color: context.handle.color.toCssColorString(),
+      displayFactor: result.displayFactor,
       axisGuideWorld:
         context.constraint.kind === 'axis'
           ? segmentThrough(
@@ -214,6 +196,20 @@ export class ScaleController extends DragSession<ScaleSessionContext, EmptyDragD
     }
   }
 
+}
+
+/**
+ * appliedFactor 的三个分量中只有被拖的轴会偏离 1（uniform 时三个一起变）。
+ * 选一个分量显示是排版决定，不是对缩放语义的二次推导。
+ */
+function pickDisplayFactor(factor: Cartesian3, uniform: boolean): number {
+  if (uniform) return factor.x
+  const components: readonly (keyof Pick<Cartesian3, 'x' | 'y' | 'z'>)[] = ['x', 'y', 'z']
+  let best = factor.x
+  for (const key of components) {
+    if (Math.abs(factor[key] - 1) > Math.abs(best - 1)) best = factor[key]
+  }
+  return best
 }
 
 /** (点 − T₀) 转到起始局部系。起始姿态为纯旋转，故结果不含物体 S。 */

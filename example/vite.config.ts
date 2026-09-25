@@ -82,11 +82,10 @@ function copyRecursive(src: string, dest: string): void {
 
 export default defineConfig({
   root: rootDir,
-  envPrefix: ['VITE_', 'CESIUM_'],
   plugins: [serveCesiumAssets()],
   resolve: {
     alias: {
-      'cesium-orbit-control': path.resolve(projectRoot, 'src/index.ts'),
+      'cesium-gizmo-controls': path.resolve(projectRoot, 'src/index.ts'),
     },
     dedupe: ['@cesium/engine'],
   },

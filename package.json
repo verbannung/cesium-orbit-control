@@ -1,5 +1,5 @@
 {
-  "name": "cesium-orbit-control",
+  "name": "cesium-gizmo-controls",
   "version": "0.1.0",
   "description": "Orbit / transform gizmo controller for Cesium",
   "type": "module",

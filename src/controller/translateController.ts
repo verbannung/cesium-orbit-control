@@ -4,17 +4,13 @@ import type { ResolvedOptions } from '../types'
 import type { PointerInput } from '../input/types'
 import type {
   ControllerInputParam,
-  ControlSnapshot,
   DragFrameOutcome,
   EmptyDragDetail,
   TranslateSessionContext,
+  TranslateTransformResult,
 } from './types'
 import type { WorldPolygon, WorldPolyline, WorldSegment } from '../types'
-import type {
-  TranslateGuideWorld,
-  TranslateSpatialState,
-  TranslateTransformState,
-} from '../overlay/types'
+import type { TranslateGuideWorld, TranslateOverlayState } from '../overlay/types'
 import { AXES } from '../constants'
 import { intersectPlane } from '../util/ray'
 import { snap } from '../util/snap'
@@ -23,7 +19,7 @@ import {
   gizmoScale,
   localDirectionToWorld,
   normalizeOrNull,
-} from './dragMath'
+} from './controllerUtil'
 import { DragSession } from './dragSession'
 
 const AXIS_GUIDE_LENGTH = 1.5
@@ -36,12 +32,6 @@ const scratchDeltaW = new Cartesian3()
 const scratchDeltaL = new Cartesian3()
 const scratchComp = new Cartesian3()
 const scratchApplied = new Cartesian3()
-
-interface TransformResult {
-  readonly transform: TranslateTransformState
-  readonly control: ControlSnapshot
-  readonly pointerWorld: Cartesian3
-}
 
 export class TranslateController extends DragSession<TranslateSessionContext, EmptyDragDetail> {
   constructor(private readonly options: ResolvedOptions) {
@@ -106,7 +96,7 @@ export class TranslateController extends DragSession<TranslateSessionContext, Em
   private computeTransform(
     input: PointerInput,
     context: TranslateSessionContext,
-  ): TransformResult | null {
+  ): TranslateTransformResult | null {
     const current = intersectPlane(
       input.rayWorld,
       context.planeOriginWorld,
@@ -118,7 +108,6 @@ export class TranslateController extends DragSession<TranslateSessionContext, Em
     // Δ_W = p − p₀，Δ_L = R₀ᵀ Δ_W
     Cartesian3.subtract(current, context.startPointWorld, scratchDeltaW)
     Matrix4.multiplyByPointAsVector(context.worldToLocalAtStart, scratchDeltaW, scratchDeltaL)
-    const rawDeltaLocal = Cartesian3.clone(scratchDeltaL, new Cartesian3())
 
     // 约束投影（局部系，R₀ 正交保证投影有效）
     if (context.constraint.kind === 'axis') {
@@ -137,10 +126,9 @@ export class TranslateController extends DragSession<TranslateSessionContext, Em
     scratchApplied.y = snap(scratchDeltaL.y / s.y, this.options.translateSnap) * s.y
     scratchApplied.z = snap(scratchDeltaL.z / s.z, this.options.translateSnap) * s.z
 
-    const appliedDeltaLocal = Cartesian3.clone(scratchApplied, new Cartesian3())
     const appliedDeltaWorld = Matrix4.multiplyByPointAsVector(
       context.localToWorldAtStart,
-      appliedDeltaLocal,
+      scratchApplied,
       new Cartesian3(),
     )
     const resultingTranslation = Cartesian3.add(
@@ -150,12 +138,6 @@ export class TranslateController extends DragSession<TranslateSessionContext, Em
     )
 
     return {
-      transform: {
-        rawDeltaLocal,
-        appliedDeltaLocal,
-        appliedDeltaWorld,
-        resultingTranslation,
-      },
       control: {
         translation: resultingTranslation,
         rotation: context.startControl.rotation,
@@ -173,32 +155,26 @@ export class TranslateController extends DragSession<TranslateSessionContext, Em
   ): DragFrameOutcome<EmptyDragDetail> | null {
     const result = this.computeTransform(input, context)
     if (!result) return null
-    const spatial = this.buildWorldSpatialState(result, context, frame)
     return {
       result: {
         effectiveControl: result.control,
-        overlay: {
-          handle: context.handle,
-          mode: 'translate',
-          transform: result.transform,
-          spatial,
-        },
+        overlay: this.buildOverlay(result, context, frame),
       },
       detail,
     }
   }
 
-  private buildWorldSpatialState(
-    result: TransformResult,
+  private buildOverlay(
+    result: TranslateTransformResult,
     context: TranslateSessionContext,
     frame: ControllerFrameContext,
-  ): TranslateSpatialState {
-    const center = result.transform.resultingTranslation
+  ): TranslateOverlayState {
+    const center = result.control.translation
     const scale = gizmoScale(frame)
 
     return {
-      startPointWorld: Cartesian3.clone(context.startPointWorld, new Cartesian3()),
-      currentPointWorld: Cartesian3.clone(result.pointerWorld, new Cartesian3()),
+      color: context.handle.color.toCssColorString(),
+      displayTranslation: Cartesian3.clone(center, new Cartesian3()),
       guide: this.buildGuide(context, center, scale, result.pointerWorld),
       labelAnchorWorld: Cartesian3.clone(center, new Cartesian3()),
     }

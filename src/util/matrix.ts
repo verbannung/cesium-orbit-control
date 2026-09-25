@@ -50,9 +50,10 @@ export function composeTRS(
 }
 
 export const DECOMPOSE_ERROR =
-  'cesium-orbit-control: modelMatrix 必须可分解为 T·R·S（无剪切、R 正交、无镜像、无零缩放）。'
+  'cesium-gizmo-controls: modelMatrix 必须可分解为 T·R·S（无剪切、R 正交、无镜像、无零缩放）。'
 
-/** 把局部 Z 对齐到 toCameraLocal，XY 环因此正对相机 */
+
+// 返回一个正交矩阵，用于将局部坐标系旋转到与相机方向对齐
 export function viewRotation(toCameraLocal: Cartesian3, result: Matrix3): Matrix3 {
   if (!(Cartesian3.magnitudeSquared(toCameraLocal) > 1e-18)) {
     return Matrix3.clone(Matrix3.IDENTITY, result)

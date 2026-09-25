@@ -1,27 +1,24 @@
-import type { ResolvedOptions } from '../types'
+import type { ControlMode, ResolvedOptions } from '../types'
 import type { OverlayInputSource } from '../input/types'
-import type { DragOverlayState } from './types'
+import type { DragOverlayState, Overlay } from './types'
 import { RotateOverlay } from './rotateOverlay'
 import { ScaleOverlay } from './scaleOverlay'
 import { TranslateOverlay } from './translateOverlay'
 
-const OVERLAY_CLASS_NAME = 'cesium-orbit-control-overlay'
+const OVERLAY_CLASS_NAME = 'cesium-gizmo-controls-overlay'
 
 /**
- * 持有唯一的临时 Canvas 图层，并按 DragOverlayState.mode 把状态路由给具体 Overlay。
- * 类型通过 mode 判别收窄，不使用断言（架构 6.7）。
+ * 持有 overlay canvas；会话画笔由 EventManager activate/deactivate 绑定。
+ * onFrame 以 activeOverlay != null 为门闩，空闲帧不做挂载/同步/绘制。
  */
 export class OverlayManager {
   readonly overlayCanvas: HTMLCanvasElement
 
   private readonly sourceCanvas: HTMLCanvasElement
   private readonly context: CanvasRenderingContext2D
-  private readonly translate: TranslateOverlay
-  private readonly rotate: RotateOverlay
-  private readonly scale: ScaleOverlay
+  private activeOverlay: Overlay | null = null
 
   private pixelRatio = 1
-  private disposed = false
   private positionedHost: HTMLElement | null = null
   private originalHostPosition: string | null = null
 
@@ -45,57 +42,54 @@ export class OverlayManager {
     const context = this.overlayCanvas.getContext('2d')
     if (!context) throw new Error('OverlayManager requires a Canvas 2D context')
     this.context = context
+  }
 
-    this.translate = new TranslateOverlay(context)
-    this.rotate = new RotateOverlay(context)
-    this.scale = new ScaleOverlay(context)
-
+  /** 拖拽会话开始：按 mode 绑定画笔并挂上 canvas。 */
+  activate(mode: ControlMode): void {
+    switch (mode) {
+      case 'translate':
+        this.activeOverlay = new TranslateOverlay(this.context)
+        break
+      case 'rotate':
+        this.activeOverlay = new RotateOverlay(this.context)
+        break
+      case 'scale':
+        this.activeOverlay = new ScaleOverlay(this.context)
+        break
+    }
     this.mountCanvas()
+  }
+
+  /** 拖拽会话结束或修改模式后：清空末帧并释放画笔。 */
+  deactivate(): void {
+    this.activeOverlay = null
     this.clear()
   }
 
-  clearForModeChange(): void {
-    this.clear()
-  }
 
-  /** 每帧一次：先清空，再按发布状态重绘。state 为 null 表示没有活动交互。 */
+  /**
+   * 每帧一次。无 active 时早退；有会话时同步画布并交给 activeOverlay 绘制。
+   * 不在此释放会话——由 EventManager deactivate。
+   */
   onFrame(state: DragOverlayState | null): void {
-    if (this.disposed) return
+    if (!this.activeOverlay) return
 
     this.mountCanvas()
     this.syncCanvasSize()
     this.clear()
 
     if (!this.options.showOverlay || !state) return
-    this.renderOverlay(state)
-  }
-
-  private renderOverlay(state: DragOverlayState): void {
-    switch (state.mode) {
-      case 'translate':
-        this.translate.render(this.input, state)
-        break
-      case 'rotate':
-        this.rotate.render(this.input, state)
-        break
-      case 'scale':
-        this.scale.render(this.input, state)
-        break
-    }
+    this.activeOverlay.render(this.input, state)
   }
 
   clear(): void {
-    if (this.disposed) return
     this.context.setTransform(1, 0, 0, 1, 0, 0)
     this.context.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height)
     this.context.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0)
   }
 
   destroy(): void {
-    if (this.disposed) return
-
-    this.clear()
-    this.disposed = true
+    this.deactivate()
 
     const parent = this.overlayCanvas.parentElement
     if (parent) parent.removeChild(this.overlayCanvas)

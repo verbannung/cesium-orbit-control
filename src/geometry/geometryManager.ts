@@ -3,7 +3,7 @@ import type { GeometryFrameContext } from '../render/types'
 import type { HandleDescriptor, HandleId } from './types'
 import type { ControlMode } from '../types'
 import type { BaseGeometry } from './baseGeometry'
-import { pickHandle } from './collision'
+import { pickHandle } from './collisionUtil'
 import { applyHandlePick } from './geometryUtil'
 import { matrixForHandle } from './handleFrame'
 import { RotateGeometry } from './rotateGeometry'
@@ -21,7 +21,7 @@ export class GeometryManager {
 
   constructor(private readonly scene: Scene) {}
 
-  setMode(mode: ControlMode): void {
+  changeMode(mode: ControlMode): void {
     this.deactivate()
     this.activeGeometry?.destroy()
     this.activeGeometry = createGeometry(mode, this.scene)

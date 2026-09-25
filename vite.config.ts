@@ -8,7 +8,7 @@ export default defineConfig({
   build: {
     lib: {
       entry: path.resolve(root, 'src/index.ts'),
-      name: 'CesiumOrbitControl',
+      name: 'CesiumGizmoControls',
       formats: ['es', 'cjs'],
       fileName: (format) => (format === 'es' ? 'index.js' : 'index.cjs'),
     },

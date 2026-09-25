@@ -1,3 +1,7 @@
+/**
+ * 几何碰撞/拾取工具：射线与手柄网格求交、拾取优先级排序。
+ * 与 geometryUtil（建网格/图元）分工，本文件只处理拾取相关纯函数。
+ */
 import { Cartesian3, IntersectionTests, Matrix4, Ray } from '@cesium/engine'
 import type { GeometryFrameContext } from '../render/types'
 import type { HandleId } from './types'

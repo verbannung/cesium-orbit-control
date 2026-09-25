@@ -20,7 +20,7 @@
     "rootDir": ".",
     "baseUrl": ".",
     "paths": {
-      "cesium-orbit-control": ["src/index.ts"]
+      "cesium-gizmo-controls": ["src/index.ts"]
     },
     "types": ["vitest/globals", "node"]
   },

@@ -76,19 +76,12 @@ export type {
 } from './render/types'
 
 export type {
-  BaseDragOverlayState,
   DragOverlayState,
   Overlay,
   RotateOverlayState,
-  RotateSpatialState,
-  RotateTransformState,
   ScaleOverlayState,
-  ScaleSpatialState,
-  ScaleTransformState,
   TranslateOverlayState,
   TranslateGuideWorld,
-  TranslateSpatialState,
-  TranslateTransformState,
 } from './overlay/types'
 
 /** @deprecated 使用 ControlMode。 */

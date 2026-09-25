@@ -5,14 +5,14 @@ import type { Overlay, TranslateOverlayState } from './types'
 import {
   drawArrowHead,
   drawLabel,
-  extendLineToViewport,
   projectPoint,
   projectPolygon,
   projectPolyline,
   projectSegment,
   strokePolyline,
   strokeSegment,
-} from './screen'
+  viewportClip,
+} from './screenUtil'
 
 const DASH_PATTERN = [7, 5]
 
@@ -22,7 +22,7 @@ export class TranslateOverlay implements Overlay<TranslateOverlayState> {
 
   render(input: OverlayInputSource, state: TranslateOverlayState): void {
     const context = this.context
-    const color = state.handle.color.toCssColorString()
+    const color = state.color
 
     context.save()
     context.strokeStyle = color
@@ -31,7 +31,7 @@ export class TranslateOverlay implements Overlay<TranslateOverlayState> {
     context.lineCap = 'round'
     context.lineJoin = 'round'
 
-    const guide = state.spatial.guide
+    const guide = state.guide
     if (guide.kind === 'axis') {
       this.drawAxisGuide(input, guide.line)
     } else if (guide.kind === 'plane') {
@@ -50,8 +50,8 @@ export class TranslateOverlay implements Overlay<TranslateOverlayState> {
     }
 
     // 直接显示 Controller 发布的结果位移，不由起终点反推。
-    const t = state.transform.resultingTranslation
-    const anchor = projectPoint(input, state.spatial.labelAnchorWorld)
+    const t = state.displayTranslation
+    const anchor = projectPoint(input, state.labelAnchorWorld)
     if (anchor) {
       drawLabel(
         context,
@@ -71,7 +71,8 @@ export class TranslateOverlay implements Overlay<TranslateOverlayState> {
   ): void {
     const projected = projectSegment(input, line)
     if (!projected) return
-    const extended = extendLineToViewport(projected[0], projected[1], input.getViewport())
+    const { widthCss, heightCss } = input.getViewport()
+    const extended = viewportClip(projected[0], projected[1], widthCss, heightCss)
     const [start, end]: readonly [Cartesian2, Cartesian2] = extended ?? projected
     this.context.setLineDash([])
     strokeSegment(this.context, start, end)

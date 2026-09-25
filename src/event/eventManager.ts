@@ -7,13 +7,15 @@ import { ScaleController } from '../controller/scaleController'
 import { TranslateController } from '../controller/translateController'
 import type { DragSessionPort } from '../controller/types'
 import type { GeometryManager } from '../geometry/geometryManager'
+import type { OverlayManager } from '../overlay/overlayManager'
 import type { RenderSystem } from '../render/renderSystem'
 
 /**
  * 把输入事件组织成 DragSession 的 begin / compute / end / cancel，并把
  * 单一 DragComputeResult 发布给 RenderSystem。
  *
- * EventManager 不计算角度、位移、缩放，也不生成 Overlay 图元。
+ * 不计算角度、位移、缩放，也不生成 Overlay 图元；
+ * 但负责与 Geometry 对称地 activate / deactivate Overlay 会话画笔。
  */
 export class EventManager {
   private active: DragSessionPort | null = null
@@ -23,6 +25,7 @@ export class EventManager {
     private readonly input: InputSource,
     private readonly render: RenderSystem,
     private readonly geometry: GeometryManager,
+    private readonly overlay: OverlayManager,
     private readonly options: ResolvedOptions,
     private readonly modeProvider: Readonly<{ readonly mode: ControlMode }>,
   ) {}
@@ -35,7 +38,7 @@ export class EventManager {
     })
   }
 
-  cancelBeforeModeChange(): void {
+  changeMode(): void {
     if (this.active) this.cancel()
   }
 
@@ -59,6 +62,7 @@ export class EventManager {
     this.active = drag
     this.render.publishInteraction(result)
     this.geometry.activate(handle)
+    this.overlay.activate(mode)
     this.cameraEnabledBackup = this.input.getCameraEnabled()
     this.input.setCameraEnabled(false)
   }
@@ -106,6 +110,7 @@ export class EventManager {
   private teardown(): void {
     this.input.setCameraEnabled(this.cameraEnabledBackup)
     this.geometry.deactivate()
+    this.overlay.deactivate()
   }
 
   destroy(): void {

@@ -66,7 +66,8 @@ export class GizmoFrame implements GizmoMatrices {
 
     this.input.getCameraPosition(this.cameraPosition)
     Cartesian3.subtract(this.cameraPosition, T, scratchToCam)
-    if (Cartesian3.magnitudeSquared(scratchToCam) < 1e-18) {
+    //退化 一般出现在移动平面法向量和相机方向平行时 导致无法计算到正确的方向
+    if(Cartesian3.magnitudeSquared(scratchToCam) < 1e-18) {
       Cartesian3.clone(Cartesian3.UNIT_Z, scratchToCam)
     } else {
       Cartesian3.normalize(scratchToCam, scratchToCam)

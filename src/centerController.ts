@@ -19,7 +19,6 @@ export class CenterController {
   private readonly overlayManager: OverlayManager
   private readonly eventManager: EventManager
   private target: Matrix4 | null = null
-  private modeInitialized = false
 
   mode: ControlMode = 'translate'
 
@@ -39,10 +38,12 @@ export class CenterController {
       input,
       this.renderSystem,
       this.geometryManager,
+      this.overlayManager,
       options,
       this,
     )
     this.eventManager.init()
+    this.geometryManager.changeMode(this.mode)
   }
 
   /** modelMatrix 必须可分解为 T·R·S（无剪切、R 正交），否则抛错 */
@@ -56,19 +57,18 @@ export class CenterController {
       rotation: Quaternion.fromRotationMatrix(decomposed.R, new Quaternion()),
       scale: Cartesian3.clone(decomposed.S, new Cartesian3()),
     }
-    this.eventManager.cancelBeforeModeChange()
+    this.eventManager.changeMode()
     this.renderSystem.bind(control)
     this.setMode(mode)
   }
 
   setMode(mode: ControlMode): void {
-    if (this.modeInitialized && mode === this.mode) return
+    if (mode === this.mode) return
 
-    this.eventManager.cancelBeforeModeChange()
+    this.eventManager.changeMode()
     this.mode = mode
-    this.geometryManager.setMode(mode)
-    this.overlayManager.clearForModeChange()
-    this.modeInitialized = true
+    this.geometryManager.changeMode(mode)
+    this.overlayManager.deactivate()
   }
 
   private emitModelMatrix(modelMatrix: Matrix4): void {

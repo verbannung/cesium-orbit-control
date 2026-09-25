@@ -4,16 +4,16 @@ import type { ResolvedOptions } from '../types'
 import type { PointerInput } from '../input/types'
 import type {
   ControllerInputParam,
-  ControlSnapshot,
   DragFrameOutcome,
   RotateDetail,
   RotateSessionContext,
+  RotateTransformResult,
 } from './types'
 import type { WorldPolygon, WorldPolyline, WorldSegment } from '../types'
-import type { RotateSpatialState, RotateTransformState } from '../overlay/types'
+import type { RotateOverlayState } from '../overlay/types'
 import { RING_RADIUS, VIEW_AXIS_RADIUS } from '../constants'
 import { intersectPlane } from '../util/ray'
-import { createDragDetailSeed, gizmoScale, normalizeOrNull } from './dragMath'
+import { createDragDetailSeed, gizmoScale, normalizeOrNull } from './controllerUtil'
 import { DragSession } from './dragSession'
 
 const RING_SEGMENTS = 64
@@ -25,14 +25,6 @@ const scratchStart = new Cartesian3()
 const scratchQ = new Cartesian3()
 const scratchCross = new Cartesian3()
 const scratchRotated = new Cartesian3()
-
-interface TransformResult {
-  readonly transform: RotateTransformState
-  readonly control: ControlSnapshot
-  readonly pointerWorld: Cartesian3
-  /** 本帧计算成功后供下一帧使用的角度连续性结果。 */
-  readonly nextDetail: RotateDetail
-}
 
 export class RotateController extends DragSession<RotateSessionContext, RotateDetail> {
   constructor(private readonly options: ResolvedOptions) {
@@ -99,7 +91,7 @@ export class RotateController extends DragSession<RotateSessionContext, RotateDe
     input: PointerInput,
     context: RotateSessionContext,
     detail: RotateDetail,
-  ): TransformResult | null {
+  ): RotateTransformResult | null {
     const current = intersectPlane(
       input.rayWorld,
       context.planeOriginWorld,
@@ -141,15 +133,8 @@ export class RotateController extends DragSession<RotateSessionContext, RotateDe
     )
 
     return {
-      transform: {
-        rawAngle,
-        accumulatedAngle,
-        // 显示单圈角：扇形因此恒定有界，多圈由 accumulatedAngle 表达。
-        displayAngle: rawAngle,
-        axisWorld: Cartesian3.clone(axis, new Cartesian3()),
-        deltaRotation,
-        resultingRotation,
-      },
+      // 显示单圈角：扇形因此恒定有界，多圈由 accumulatedAngle 表达。
+      displayAngle: rawAngle,
       control: {
         translation: context.startControl.translation,
         rotation: resultingRotation,
@@ -168,26 +153,20 @@ export class RotateController extends DragSession<RotateSessionContext, RotateDe
   ): DragFrameOutcome<RotateDetail> | null {
     const result = this.computeTransform(input, context, detail)
     if (!result) return null
-    const spatial = this.buildWorldSpatialState(result, context, frame)
     return {
       result: {
         effectiveControl: result.control,
-        overlay: {
-          handle: context.handle,
-          mode: 'rotate',
-          transform: result.transform,
-          spatial,
-        },
+        overlay: this.buildOverlay(result, context, frame),
       },
       detail: result.nextDetail,
     }
   }
 
-  private buildWorldSpatialState(
-    result: TransformResult,
+  private buildOverlay(
+    result: RotateTransformResult,
     context: RotateSessionContext,
     frame: ControllerFrameContext,
-  ): RotateSpatialState {
+  ): RotateOverlayState {
     const center = context.planeOriginWorld
     const scale = gizmoScale(frame)
     const radius = (context.viewAligned ? VIEW_AXIS_RADIUS : RING_RADIUS) * scale
@@ -199,11 +178,10 @@ export class RotateController extends DragSession<RotateSessionContext, RotateDe
     )
 
     return {
-      centerWorld: Cartesian3.clone(center, new Cartesian3()),
-      startPointWorld: Cartesian3.clone(context.startPointWorld, new Cartesian3()),
-      currentPointWorld: Cartesian3.clone(result.pointerWorld, new Cartesian3()),
+      color: context.handle.color.toCssColorString(),
+      displayAngle: result.displayAngle,
       ringWorld: buildRing(center, start, axis),
-      sectorWorld: buildSector(center, start, axis, result.transform.displayAngle),
+      sectorWorld: buildSector(center, start, axis, result.displayAngle),
       axisGuideWorld: !context.viewAligned
         ? segmentThrough(center, axis, LONG_AXIS_EXTENT * scale)
         : null,

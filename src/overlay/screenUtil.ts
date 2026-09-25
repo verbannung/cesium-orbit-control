@@ -1,11 +1,12 @@
 import { Cartesian2, type Cartesian3 } from '@cesium/engine'
-import type { OverlayInputSource, ViewportSnapshot } from '../input/types'
+import type { OverlayInputSource } from '../input/types'
 import type { WorldPolygon, WorldPolyline, WorldSegment } from '../types'
 
 /**
- * Overlay 共用的屏幕空间工具：投影、二维裁剪与 Canvas 绘制。
- * 这里只有像素运算，没有任何三维语义推导。
+ * Overlay 屏幕空间工具包：投影、纯 2D 点运算与 Canvas 绘制。
  */
+
+/* -------------------------------- 投影 --------------------------------- */
 
 export function projectPoint(
   input: OverlayInputSource,
@@ -42,8 +43,8 @@ export function projectPolygon(
   input: OverlayInputSource,
   polygon: WorldPolygon,
 ): Cartesian2[] | null {
-  const points = projectPoints(input, polygon.points)
-  return points && points.length >= 3 ? points : null
+  if (polygon.points.length < 3) return null
+  return projectPoints(input, polygon.points)
 }
 
 export function projectSegment(
@@ -55,6 +56,9 @@ export function projectSegment(
   return start && end ? [start, end] : null
 }
 
+/* ------------------------------ 纯 2D 运算 ------------------------------ */
+
+/** 两点距离的平方，避免开方。 */
 export function distanceSquared(a: Cartesian2, b: Cartesian2): number {
   const x = a.x - b.x
   const y = a.y - b.y
@@ -62,26 +66,26 @@ export function distanceSquared(a: Cartesian2, b: Cartesian2): number {
 }
 
 /**
- * 把两点确定的直线延长到视口边框，返回边框上的两个交点。
- * 这是屏幕空间的二维直线裁剪，不涉及三维推导。
+ * 把两点确定的直线延长到矩形视口边框，返回边框上的两个交点。
+ * Liang–Barsky算法 二维直线裁剪。
  */
-export function extendLineToViewport(
+export function viewportClip(
   a: Cartesian2,
   b: Cartesian2,
-  viewport: ViewportSnapshot,
+  width: number,
+  height: number,
 ): readonly [Cartesian2, Cartesian2] | null {
   const dx = b.x - a.x
   const dy = b.y - a.y
   if (dx * dx + dy * dy < 1e-9) return null
 
-  // Liang–Barsky：求参数区间 [tMin, tMax] 使点落在视口内。
   let tMin = -Infinity
   let tMax = Infinity
   const limits: readonly [number, number][] = [
     [-dx, a.x],
-    [dx, viewport.widthCss - a.x],
+    [dx, width - a.x],
     [-dy, a.y],
-    [dy, viewport.heightCss - a.y],
+    [dy, height - a.y],
   ]
 
   for (const [p, q] of limits) {
@@ -100,6 +104,35 @@ export function extendLineToViewport(
     new Cartesian2(a.x + dx * tMax, a.y + dy * tMax),
   ]
 }
+
+/**
+ * 屏幕线段方向的箭头三角形三点（tip + 两翼）。
+ * 退化线段返回 null。
+ */
+export function arrowHeadPoints(
+  from: Cartesian2,
+  to: Cartesian2,
+  size = 9,
+): readonly [Cartesian2, Cartesian2, Cartesian2] | null {
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  if (dx * dx + dy * dy < 1e-9) return null
+  const angle = Math.atan2(dy, dx)
+  const spread = Math.PI / 6
+  return [
+    new Cartesian2(to.x, to.y),
+    new Cartesian2(
+      to.x - size * Math.cos(angle - spread),
+      to.y - size * Math.sin(angle - spread),
+    ),
+    new Cartesian2(
+      to.x - size * Math.cos(angle + spread),
+      to.y - size * Math.sin(angle + spread),
+    ),
+  ]
+}
+
+/* ------------------------------ Canvas 绘制 ----------------------------- */
 
 export function strokePolyline(
   context: CanvasRenderingContext2D,
@@ -142,17 +175,9 @@ export function drawArrowHead(
   to: Cartesian2,
   size = 9,
 ): void {
-  const dx = to.x - from.x
-  const dy = to.y - from.y
-  if (dx * dx + dy * dy < 1e-9) return
-  const angle = Math.atan2(dy, dx)
-  const spread = Math.PI / 6
-  context.beginPath()
-  context.moveTo(to.x, to.y)
-  context.lineTo(to.x - size * Math.cos(angle - spread), to.y - size * Math.sin(angle - spread))
-  context.lineTo(to.x - size * Math.cos(angle + spread), to.y - size * Math.sin(angle + spread))
-  context.closePath()
-  context.fill()
+  const points = arrowHeadPoints(from, to, size)
+  if (!points) return
+  fillPolygon(context, points)
 }
 
 export function drawLabel(

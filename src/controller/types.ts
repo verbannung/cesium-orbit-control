@@ -10,7 +10,8 @@ import type { ControlMode } from '../types'
  * 本文件只允许出现类型，不得导出任何运行时值。
  */
 
-//T R S
+/* ---------------------------------- TRS ---------------------------------- */
+
 export interface ControlSnapshot {
   readonly translation: Cartesian3
   readonly rotation: Quaternion
@@ -47,19 +48,28 @@ export interface ControllerInputParam {
   readonly start: SessionStartSnapshot
 }
 
-/** begin() 阶段由 ControllerInputParam 解析出的、三种模式共用的锁定中间结果。 */
-export interface DragDetailSeed {
+/* ------------------------- 锁定的会话几何（共用） ------------------------- */
+
+/**
+ * begin 后三种模式共用的几何锁：平面、起始交点、起始终态矩阵。
+ * SessionContext 与 DragDetailSeed 都建立在此之上。
+ */
+export interface SessionGeometryLock {
   /** 按下时冻结的模型中心，世界坐标。 */
   readonly startCenterPointWorld: Cartesian3
   /** 鼠标射线与拖拽平面的按下交点，世界坐标。 */
   readonly startPointWorld: Cartesian3
-  // 平面中心点世界坐标
+  /** 平面中心点，世界坐标。 */
   readonly planeOriginWorld: Cartesian3
-  //平面法向世界坐标
+  /** 平面法向，世界坐标。 */
   readonly planeNormalWorld: Cartesian3
   readonly localToWorldAtStart: Matrix4
   readonly worldToLocalAtStart: Matrix4
   readonly startControl: ControlSnapshot
+}
+
+/** begin() 阶段由 ControllerInputParam 解析出的、三种模式共用的锁定中间结果。 */
+export interface DragDetailSeed extends SessionGeometryLock {
   readonly toCameraLocal: Cartesian3
   readonly planeNormalLocal: Cartesian3
 }
@@ -67,20 +77,9 @@ export interface DragDetailSeed {
 /* ------------------------- 锁定的会话上下文（TSessionContext） ------------------------- */
 
 /** begin 后锁定、整次拖拽期间不变的 Translate 计算结果。 */
-export interface TranslateSessionContext {
+export interface TranslateSessionContext extends SessionGeometryLock {
   readonly mode: 'translate'
   readonly handle: HandleDescriptor
-  /** 按下时冻结的模型中心，世界坐标。 */
-  readonly startCenterPointWorld: Cartesian3
-  /** 鼠标射线与拖拽平面的按下交点，世界坐标。 */
-  readonly startPointWorld: Cartesian3
-  // 平面中心点世界坐标
-  readonly planeOriginWorld: Cartesian3
-  //平面法向世界坐标
-  readonly planeNormalWorld: Cartesian3
-  readonly localToWorldAtStart: Matrix4
-  readonly worldToLocalAtStart: Matrix4
-  readonly startControl: ControlSnapshot
   readonly constraint:
     | {
         readonly kind: 'axis'
@@ -99,44 +98,23 @@ export interface TranslateSessionContext {
 }
 
 /** begin 后锁定、整次拖拽期间不变的 Rotate 计算结果。 */
-export interface RotateSessionContext {
+export interface RotateSessionContext extends SessionGeometryLock {
   readonly mode: 'rotate'
   readonly handle: HandleDescriptor
-  /** 按下时冻结的模型中心，世界坐标。 */
-  readonly startCenterPointWorld: Cartesian3
-  /** 鼠标射线与拖拽平面的按下交点，世界坐标。 */
-  readonly startPointWorld: Cartesian3
-  // 平面中心点世界坐标
-  readonly planeOriginWorld: Cartesian3
-  //平面法向世界坐标
-  readonly planeNormalWorld: Cartesian3
-  readonly localToWorldAtStart: Matrix4
-  readonly worldToLocalAtStart: Matrix4
-  readonly startControl: ControlSnapshot
   readonly axisLocal: Cartesian3
   readonly axisWorld: Cartesian3
   readonly startDirectionLocal: Cartesian3
   readonly startDirectionWorld: Cartesian3
-  readonly radiusWorld: number //旋转轴世界半径
+  /** 旋转轴世界半径。 */
+  readonly radiusWorld: number
   /** view 手柄：环恒定正对相机，且不画三维轴向引导。 */
   readonly viewAligned: boolean
 }
 
 /** begin 后锁定、整次拖拽期间不变的 Scale 计算结果。 */
-export interface ScaleSessionContext {
+export interface ScaleSessionContext extends SessionGeometryLock {
   readonly mode: 'scale'
   readonly handle: HandleDescriptor
-  /** 按下时冻结的模型中心，世界坐标。 */
-  readonly startCenterPointWorld: Cartesian3
-  /** 鼠标射线与拖拽平面的按下交点，世界坐标。 */
-  readonly startPointWorld: Cartesian3
-  // 平面中心点世界坐标
-  readonly planeOriginWorld: Cartesian3
-  //平面法向世界坐标
-  readonly planeNormalWorld: Cartesian3
-  readonly localToWorldAtStart: Matrix4
-  readonly worldToLocalAtStart: Matrix4
-  readonly startControl: ControlSnapshot
   readonly constraint:
     | {
         readonly kind: 'axis'
@@ -166,6 +144,33 @@ export interface RotateDetail {
   readonly previousRawAngle: number
   readonly completedTurns: number
 }
+
+/* ----------------------- 逐帧中间结果（buildOverlay 前） ----------------------- */
+
+/** Translate 单帧变换中间结果。 */
+export interface TranslateTransformResult {
+  readonly control: ControlSnapshot
+  readonly pointerWorld: Cartesian3
+}
+
+/** Rotate 单帧变换中间结果。 */
+export interface RotateTransformResult {
+  /** 单圈显示角；扇形与标签用。 */
+  readonly displayAngle: number
+  readonly control: ControlSnapshot
+  readonly pointerWorld: Cartesian3
+  /** 本帧计算成功后供下一帧使用的角度连续性结果。 */
+  readonly nextDetail: RotateDetail
+}
+
+/** Scale 单帧变换中间结果。 */
+export interface ScaleTransformResult {
+  readonly displayFactor: number
+  readonly control: ControlSnapshot
+  readonly pointerWorld: Cartesian3
+}
+
+/* --------------------------- 对外发布与会话端口 --------------------------- */
 
 /** 一次成功的逐帧计算：对外发布的结果，以及供下一帧使用的跨帧结果。 */
 export interface DragFrameOutcome<TDetail> {

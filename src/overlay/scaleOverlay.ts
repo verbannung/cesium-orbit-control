@@ -1,15 +1,15 @@
-import { Cartesian3, type Cartesian2 } from '@cesium/engine'
+import type { Cartesian2 } from '@cesium/engine'
 import type { OverlayInputSource } from '../input/types'
 import type { WorldSegment } from '../types'
 import type { Overlay, ScaleOverlayState } from './types'
 import {
   drawArrowHead,
   drawLabel,
-  extendLineToViewport,
   projectPoint,
   projectSegment,
   strokeSegment,
-} from './screen'
+  viewportClip,
+} from './screenUtil'
 
 const DASH_PATTERN = [7, 5]
 
@@ -19,8 +19,7 @@ export class ScaleOverlay implements Overlay<ScaleOverlayState> {
 
   render(input: OverlayInputSource, state: ScaleOverlayState): void {
     const context = this.context
-    const color = state.handle.color.toCssColorString()
-    const spatial = state.spatial
+    const color = state.color
 
     context.save()
     context.strokeStyle = color
@@ -28,13 +27,12 @@ export class ScaleOverlay implements Overlay<ScaleOverlayState> {
     context.lineWidth = 2
     context.lineCap = 'round'
 
-    if (spatial.axisGuideWorld) this.drawAxisGuide(input, spatial.axisGuideWorld)
-    if (spatial.movementArrowWorld) this.drawArrow(input, spatial.movementArrowWorld)
+    if (state.axisGuideWorld) this.drawAxisGuide(input, state.axisGuideWorld)
+    if (state.movementArrowWorld) this.drawArrow(input, state.movementArrowWorld)
 
-    // 显示 Controller 实际施加的比例，不用 current/start 反推（会丢掉 snap 与 clamp）。
-    const anchor = projectPoint(input, spatial.labelAnchorWorld)
+    const anchor = projectPoint(input, state.labelAnchorWorld)
     if (anchor) {
-      drawLabel(context, anchor, `Scale ${displayFactor(state).toFixed(3)}×`)
+      drawLabel(context, anchor, `Scale ${state.displayFactor.toFixed(3)}×`)
     }
 
     context.setLineDash([])
@@ -44,7 +42,8 @@ export class ScaleOverlay implements Overlay<ScaleOverlayState> {
   private drawAxisGuide(input: OverlayInputSource, guide: WorldSegment): void {
     const projected = projectSegment(input, guide)
     if (!projected) return
-    const extended = extendLineToViewport(projected[0], projected[1], input.getViewport())
+    const { widthCss, heightCss } = input.getViewport()
+    const extended = viewportClip(projected[0], projected[1], widthCss, heightCss)
     const [start, end]: readonly [Cartesian2, Cartesian2] = extended ?? projected
     this.context.setLineDash([])
     strokeSegment(this.context, start, end)
@@ -60,19 +59,4 @@ export class ScaleOverlay implements Overlay<ScaleOverlayState> {
     context.setLineDash([])
     drawArrowHead(context, start, end, 10)
   }
-}
-
-/**
- * appliedFactor 的三个分量中只有被拖的轴会偏离 1（uniform 时三个一起变）。
- * 选一个分量显示是排版决定，不是对缩放语义的二次推导。
- */
-function displayFactor(state: ScaleOverlayState): number {
-  const factor = state.transform.appliedFactor
-  if (state.transform.uniform) return factor.x
-  const components: readonly (keyof Pick<Cartesian3, 'x' | 'y' | 'z'>)[] = ['x', 'y', 'z']
-  let best = factor.x
-  for (const key of components) {
-    if (Math.abs(factor[key] - 1) > Math.abs(best - 1)) best = factor[key]
-  }
-  return best
 }
