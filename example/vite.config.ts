@@ -9,7 +9,12 @@ const engineRoot = path.resolve(projectRoot, 'node_modules/@cesium/engine')
 const engineBuild = path.resolve(engineRoot, 'Build')
 const engineAssets = path.resolve(engineRoot, 'Source/Assets')
 
-function serveCesiumAssets(): Plugin {
+/** GitHub Pages project-site path; keep in sync with the repo name. */
+const PAGES_BASE = '/cesium-gizmo-controls/'
+
+function serveCesiumAssets(command: 'build' | 'serve'): Plugin {
+  const cesiumBaseUrl =
+    command === 'serve' ? '/cesium/' : `${PAGES_BASE}cesium/`
   const copyDirs = [
     { from: path.join(engineBuild, 'Workers'), to: 'Workers' },
     { from: path.join(engineBuild, 'ThirdParty'), to: 'ThirdParty' },
@@ -21,9 +26,15 @@ function serveCesiumAssets(): Plugin {
     config() {
       return {
         define: {
-          CESIUM_BASE_URL: JSON.stringify('/cesium/'),
+          CESIUM_BASE_URL: JSON.stringify(cesiumBaseUrl),
         },
       }
+    },
+    transformIndexHtml(html) {
+      return html.replace(
+        /window\.CESIUM_BASE_URL\s*=\s*['"][^'"]*['"]/,
+        `window.CESIUM_BASE_URL = '${cesiumBaseUrl}'`,
+      )
     },
     configureServer(server) {
       server.middlewares.use('/cesium', (req, res, next) => {
@@ -80,9 +91,10 @@ function copyRecursive(src: string, dest: string): void {
   fs.copyFileSync(src, dest)
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   root: rootDir,
-  plugins: [serveCesiumAssets()],
+  base: command === 'serve' ? '/' : PAGES_BASE,
+  plugins: [serveCesiumAssets(command)],
   resolve: {
     alias: {
       'cesium-gizmo-controls': path.resolve(projectRoot, 'src/index.ts'),
@@ -100,4 +112,4 @@ export default defineConfig({
     outDir: path.resolve(rootDir, 'dist'),
     emptyOutDir: true,
   },
-})
+}))

@@ -21,7 +21,7 @@ import {
   Primitive,
   PrimitiveType,
 } from '@cesium/engine'
-import { RING_RADIUS } from '../constants'
+import { INNER_VIEW_AXIS_RADIUS } from '../constants'
 import type { HandleId, MeshData } from './types'
 import type { Handle } from './handle'
 import ringFS from '../shader/ringFS.glsl?raw'
@@ -37,7 +37,6 @@ export const HEAD_SLICES = 8
 export const BOX_HALF = 0.05
 export const STEM_WIDTH_PX = 2
 export const TUBE_RADIUS = 0.03
-export const VIEW_PLANE_RADIUS = 0.22
 export const RING_HALF_WIDTH_PX = 3
 export const PLANE_MIN = 0.4
 export const PLANE_MAX = 0.7
@@ -98,17 +97,7 @@ function createGizmoMaterial(color: Color): Material {
   })
 }
 
-/** 平面手柄四角：u/v 张成面上 [PLANE_MIN, PLANE_MAX] */
-export function planeCorners(u: Cartesian3, v: Cartesian3): Cartesian3[] {
-  const at = (a: number, b: number): Cartesian3 =>
-    new Cartesian3(a * u.x + b * v.x, a * u.y + b * v.y, a * u.z + b * v.z)
-  return [
-    at(PLANE_MIN, PLANE_MIN),
-    at(PLANE_MIN, PLANE_MAX),
-    at(PLANE_MAX, PLANE_MAX),
-    at(PLANE_MAX, PLANE_MIN),
-  ]
-}
+
 
 // —— 视觉：环 ——
 
@@ -119,9 +108,10 @@ export function buildRing(opts: {
   color: Color
   radius?: number
   cullHalf: boolean
+  solid: boolean //是否是实心环
 }): Primitive[] {
   const { id, u, v, color, cullHalf } = opts
-  const radius = opts.radius ?? RING_RADIUS
+  const radius = opts.radius ?? INNER_VIEW_AXIS_RADIUS
   const material = createGizmoMaterial(color)
 
   const appearance = new MaterialAppearance({
@@ -217,7 +207,7 @@ export function buildViewRing(
     u,
     v,
     color: opts.color,
-    radius: opts.radius ?? VIEW_PLANE_RADIUS,
+    radius: opts.radius ?? INNER_VIEW_AXIS_RADIUS,
     cullHalf: opts.cullHalf ?? false,
   })
 }
@@ -230,7 +220,7 @@ export function buildViewRing(
 export function buildViewRingMeshes(
   u: Cartesian3,
   v: Cartesian3,
-  radius = VIEW_PLANE_RADIUS,
+  radius = INNER_VIEW_AXIS_RADIUS,
 ): MeshData[] {
   const direction = Cartesian3.cross(u, v, new Cartesian3())
   return [
@@ -389,34 +379,6 @@ export function buildBoxAxisMeshes(u: Cartesian3, v: Cartesian3): MeshData[] {
     buildStemMesh(direction, u, v, AXIS_LENGTH, TUBE_RADIUS),
     buildBoxMesh(direction, AXIS_LENGTH + BOX_HALF, Math.max(BOX_HALF, TUBE_RADIUS)),
   ]
-}
-
-/**
- * 旋转轴环（半环剔除）。几何建在 u、v 张成的局部平面上。
- * 数据格式：`(u, v, id) → Primitive[]`
- */
-export function buildRotateRing(
-  u: Cartesian3,
-  v: Cartesian3,
-  id: HandleId,
-  color: Color,
-): Primitive[] {
-  return buildRing({
-    id,
-    u,
-    v,
-    color,
-    radius: RING_RADIUS,
-    cullHalf: true,
-  })
-}
-
-/**
- * 旋转轴环碰撞代理：整圈圆环管。
- * 数据格式：`(u, v) → MeshData[]`
- */
-export function buildRotateRingMeshes(u: Cartesian3, v: Cartesian3): MeshData[] {
-  return buildViewRingMeshes(u, v, RING_RADIUS)
 }
 
 // —— 碰撞 mesh 原语 ——

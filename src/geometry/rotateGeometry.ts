@@ -1,12 +1,7 @@
 import { Cartesian3, Color } from '@cesium/engine'
 import { BaseGeometry } from './baseGeometry'
-import { VIEW_AXIS_RADIUS } from '../constants'
-import {
-  buildRotateRing,
-  buildRotateRingMeshes,
-  buildViewRing,
-  buildViewRingMeshes,
-} from './geometryUtil'
+import { OUTER_AXIS_RADIUS, OUTER_VIEW_AXIS_RADIUS } from '../constants'
+import { buildViewRing, buildViewRingMeshes } from './geometryUtil'
 import { Handle } from './handle'
 
 export class RotateGeometry extends BaseGeometry {
@@ -22,8 +17,13 @@ export class RotateGeometry extends BaseGeometry {
       { kind: 'axis', axisLocal: X },
       Color.RED,
       'gizmo',
-      buildRotateRingMeshes(Y, Z),
-      buildRotateRing(Y, Z, 'rotate-x', Color.RED),
+      buildViewRingMeshes(Y, Z, OUTER_AXIS_RADIUS),
+      buildViewRing(Y, Z, {
+        id: 'rotate-x',
+        color: Color.RED,
+        radius: OUTER_AXIS_RADIUS,
+        cullHalf: true,
+      }),
     )
     const y = new Handle(
       'rotate-y',
@@ -31,8 +31,13 @@ export class RotateGeometry extends BaseGeometry {
       { kind: 'axis', axisLocal: Y },
       Color.LIME,
       'gizmo',
-      buildRotateRingMeshes(Z, X),
-      buildRotateRing(Z, X, 'rotate-y', Color.LIME),
+      buildViewRingMeshes(Z, X, OUTER_AXIS_RADIUS),
+      buildViewRing(Z, X, {
+        id: 'rotate-y',
+        color: Color.LIME,
+        radius: OUTER_AXIS_RADIUS,
+        cullHalf: true,
+      }),
     )
     const z = new Handle(
       'rotate-z',
@@ -40,8 +45,13 @@ export class RotateGeometry extends BaseGeometry {
       { kind: 'axis', axisLocal: Z },
       Color.DODGERBLUE,
       'gizmo',
-      buildRotateRingMeshes(X, Y),
-      buildRotateRing(X, Y, 'rotate-z', Color.DODGERBLUE),
+      buildViewRingMeshes(X, Y, OUTER_AXIS_RADIUS),
+      buildViewRing(X, Y, {
+        id: 'rotate-z',
+        color: Color.DODGERBLUE,
+        radius: OUTER_AXIS_RADIUS,
+        cullHalf: true,
+      }),
     )
     const view = new Handle(
       'rotate-view',
@@ -49,11 +59,11 @@ export class RotateGeometry extends BaseGeometry {
       { kind: 'view' },
       Color.WHITE,
       'view',
-      buildViewRingMeshes(X, Y, VIEW_AXIS_RADIUS),
+      buildViewRingMeshes(X, Y, OUTER_VIEW_AXIS_RADIUS),
       buildViewRing(X, Y, {
         id: 'rotate-view',
         color: Color.WHITE,
-        radius: VIEW_AXIS_RADIUS,
+        radius: OUTER_VIEW_AXIS_RADIUS,
         cullHalf: false,
       }),
     )

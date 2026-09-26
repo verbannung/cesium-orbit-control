@@ -1,6 +1,6 @@
 import { Cartesian3, Color } from '@cesium/engine'
 import { BaseGeometry } from './baseGeometry'
-import { VIEW_AXIS_RADIUS } from '../constants'
+import { INNER_VIEW_AXIS_RADIUS } from '../constants'
 import {
   buildBoxAxis,
   buildBoxAxisMeshes,
@@ -48,11 +48,11 @@ export class ScaleGeometry extends BaseGeometry {
       { kind: 'uniform' },
       Color.WHITE,
       'view',
-      buildViewRingMeshes(X, Y, VIEW_AXIS_RADIUS),
+      buildViewRingMeshes(X, Y, INNER_VIEW_AXIS_RADIUS),
       buildViewRing(X, Y, {
         id: 'scale-uniform',
         color: Color.WHITE,
-        radius: VIEW_AXIS_RADIUS,
+        radius: INNER_VIEW_AXIS_RADIUS,
         cullHalf: false,
       }),
     )

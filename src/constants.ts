@@ -12,8 +12,11 @@ export const AXES: Triple<Cartesian3> = [
   Cartesian3.UNIT_Z,
 ]
 
-/** 旋转/缩放环半径，Geometry 负责绘制，Controller 依据同一半径换算拖拽半径。 */
-export const RING_RADIUS = 1.0
+/** rotate-view 环半径。比轴环稍大，形成层次。 */
+export const OUTER_VIEW_AXIS_RADIUS = 1.2
 
-/** 视轴环半径，Geometry 与 Controller 共享。 */
-export const VIEW_AXIS_RADIUS = 0.22
+/** rotate XYZ 轴环半径。Geometry 绘制，Controller 按同一半径换算 overlay。 */
+export const OUTER_AXIS_RADIUS = 1.0
+
+/** 平移/缩放视平面环半径。Geometry 与默认 buildViewRing 共享。 */
+export const INNER_VIEW_AXIS_RADIUS = 0.22

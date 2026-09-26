@@ -19,6 +19,20 @@ Transform gizmo controls for Cesium scenes. Bind a Cesium `Matrix4` to edit an o
 - Offers optional snapping, interaction overlays, picking tolerance, and visibility thresholds.
 - Calls `onChange` with a fresh `Matrix4` whenever an interaction changes the bound transform.
 
+## Demo
+
+Live example: https://verbannung.github.io/cesium-gizmo-controls/
+
+## Install
+
+Install from the rolling GitHub Release :
+
+```bash
+npm install https://github.com/verbannung/cesium-gizmo-controls/releases/download/latest/cesium-gizmo-controls-0.1.0.tgz
+```
+
+Release builds are published from `main`. Day-to-day development happens on `develop`.
+
 ## Requirements
 
 - Node.js `>=18` for local development.

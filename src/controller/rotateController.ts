@@ -11,7 +11,7 @@ import type {
 } from './types'
 import type { WorldPolygon, WorldPolyline, WorldSegment } from '../types'
 import type { RotateOverlayState } from '../overlay/types'
-import { RING_RADIUS, VIEW_AXIS_RADIUS } from '../constants'
+import { OUTER_AXIS_RADIUS, OUTER_VIEW_AXIS_RADIUS } from '../constants'
 import { intersectPlane } from '../util/ray'
 import { createDragDetailSeed, gizmoScale, normalizeOrNull } from './controllerUtil'
 import { DragSession } from './dragSession'
@@ -169,7 +169,8 @@ export class RotateController extends DragSession<RotateSessionContext, RotateDe
   ): RotateOverlayState {
     const center = context.planeOriginWorld
     const scale = gizmoScale(frame)
-    const radius = (context.viewAligned ? VIEW_AXIS_RADIUS : RING_RADIUS) * scale
+    const radius =
+      (context.viewAligned ? OUTER_VIEW_AXIS_RADIUS : OUTER_AXIS_RADIUS) * scale
     const axis = context.axisWorld
     const start = Cartesian3.multiplyByScalar(
       context.startDirectionWorld,

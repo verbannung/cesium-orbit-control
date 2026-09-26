@@ -19,6 +19,20 @@
 - 支持可选的吸附、交互辅助层、拾取容差和可见性阈值。
 - 每次交互改变已绑定变换时，都会通过 `onChange` 提供新的 `Matrix4`。
 
+## 演示
+
+在线示例：https://verbannung.github.io/cesium-gizmo-controls/
+
+## 安装
+
+从滚动更新的 GitHub Release 安装：
+
+```bash
+npm install https://github.com/verbannung/cesium-gizmo-controls/releases/download/latest/cesium-gizmo-controls-0.1.0.tgz
+```
+
+发版构建来自 `main`。日常开发在 `develop` 上进行。
+
 ## 要求
 
 - 本地开发需要 Node.js `>=18`。
