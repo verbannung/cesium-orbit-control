@@ -200,7 +200,7 @@ function buildRingStrip(u: Cartesian3, v: Cartesian3, radius: number): Geometry 
 export function buildViewRing(
   u: Cartesian3,
   v: Cartesian3,
-  opts: { id?: HandleId; color: Color; radius?: number; cullHalf?: boolean },
+  opts: { id?: HandleId; color: Color; radius?: number; cullHalf?: boolean; solid?: boolean },
 ): Primitive[] {
   return buildRing({
     id: opts.id ?? 'translate-view',
@@ -209,6 +209,7 @@ export function buildViewRing(
     color: opts.color,
     radius: opts.radius ?? INNER_VIEW_AXIS_RADIUS,
     cullHalf: opts.cullHalf ?? false,
+    solid: opts.solid ?? false,
   })
 }
 
