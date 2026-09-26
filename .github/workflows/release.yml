@@ -1,0 +1,58 @@
+name: GitHub Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Pack
+        run: npm pack
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest
+          make_latest: true
+          files: cesium-gizmo-controls-*.tgz
+          body: |
+            Rolling package build from `main`.
+
+            - Commit: `${{ github.sha }}`
+            - Install:
+
+            ```bash
+            npm install https://github.com/verbannung/cesium-gizmo-controls/releases/download/latest/cesium-gizmo-controls-0.1.0.tgz
+            ```
